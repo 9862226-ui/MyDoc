@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-2: #eff1f4;
+  --line: #e2e5ea;
+  --fg: #15171c;
+  --muted: #687082;
+  --accent: #2563eb;
+  --accent-soft: #e7eeff;
+  --accent-fg: #ffffff;
+  --danger: #dc2626;
+  --danger-soft: #fdecec;
+  --warn: #b45309;
+  --warn-soft: #fff3dc;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1015;
+    --surface: #161920;
+    --surface-2: #1f232c;
+    --line: #2a2f3a;
+    --fg: #e6e8ee;
+    --muted: #949bab;
+    --accent: #5b8cff;
+    --accent-soft: #1b2640;
+    --accent-fg: #ffffff;
+    --danger: #f87171;
+    --danger-soft: #3a1c1f;
+    --warn: #f5b638;
+    --warn-soft: #3a2d12;
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-fg: var(--accent-fg);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --font-sans:
+    system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+}
+
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--line);
+  }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    -webkit-font-smoothing: antialiased;
+  }
+  dialog {
+    color: var(--fg);
+  }
+  dialog::backdrop {
+    background: rgb(0 0 0 / 0.45);
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+}

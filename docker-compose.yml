@@ -1,0 +1,13 @@
+services:
+  mydoc:
+    build: .
+    image: mydoc
+    container_name: mydoc
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # 登录密码，务必改成你自己的
+      APP_PASSWORD: change-me
+    volumes:
+      - ./data:/app/data
