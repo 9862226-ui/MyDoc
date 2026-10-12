@@ -1,188 +1,150 @@
 "use client";
 
-import { AlarmClock, ArrowRight, Clock, FolderPlus, Inbox, Plus, Search, Star, Upload } from "lucide-react";
+import { FolderPlus, Plus, Search, Upload } from "lucide-react";
 import NextLink from "next/link";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useAppData } from "@/lib/client";
-import { relativeTime } from "@/lib/format";
+import { expiryInfo, shortDate, shortTime } from "@/lib/format";
 import { platformLabel } from "@/lib/platforms";
 import type { Link } from "@/lib/types";
-import { isExpiring, projectIndex, projectPathLabel } from "@/lib/view";
-import { Button, Kbd, PlatformIcon, Spinner, useModKey } from "./ui";
+import { daysUntil, isExpiring, projectIndex, projectPathLabel } from "@/lib/view";
+import { CodeChip, ExpiryChip } from "./LinkItem";
+import { Banner, Button, DocIcon, EmptyState, Kbd, ProjectDot, Skeleton, StarIcon, Tabs, useModKey } from "./ui";
 import { useLinkActions, useUI } from "./ui-context";
+
+const QUICK_LIMIT = 10;
+const LIST_LIMIT = 8;
+
+type Tab = "recent" | "added";
 
 export function HomeView() {
   const { data } = useAppData();
   const ui = useUI();
-  const mod = useModKey();
+  const [tab, setTab] = useState<Tab>("recent");
 
-  if (!data) {
-    return (
-      <div className="flex justify-center p-16 text-muted">
-        <Spinner size={22} />
-      </div>
-    );
-  }
+  if (!data) return <HomeSkeleton />;
+  if (data.links.length === 0) return <Welcome hasGroups={data.groups.length > 0} />;
 
   const index = projectIndex(data);
   const label = (l: Link) => projectPathLabel(l.projectId === null ? undefined : index.get(l.projectId));
-  const pinned = data.links.filter((l) => l.favorite || l.pinned).sort((a, b) => b.visitCount - a.visitCount);
-  const recent = data.links
-    .filter((l) => l.lastVisitedAt)
-    .sort((a, b) => b.lastVisitedAt!.localeCompare(a.lastVisitedAt!))
-    .slice(0, 8);
-  const added = [...data.links].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 8);
+  const favorites = data.links
+    .filter((l) => l.favorite)
+    .sort((a, b) => b.visitCount - a.visitCount || (b.lastVisitedAt ?? "").localeCompare(a.lastVisitedAt ?? ""))
+    .slice(0, QUICK_LIMIT);
+  const lists: Record<Tab, Link[]> = {
+    recent: data.links
+      .filter((l) => l.lastVisitedAt)
+      .sort((a, b) => b.lastVisitedAt!.localeCompare(a.lastVisitedAt!))
+      .slice(0, LIST_LIMIT),
+    added: [...data.links].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id).slice(0, LIST_LIMIT),
+  };
   const inbox = data.links.filter((l) => l.projectId === null).length;
-  const expiring = data.links.filter((l) => isExpiring(l)).length;
+  const expiring = data.links.filter((l) => isExpiring(l)).sort((a, b) => a.expiresAt!.localeCompare(b.expiresAt!));
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8 p-4 pb-16 md:p-8">
+    <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-7 px-4 pt-3 pb-12 md:px-8 md:pt-6">
       <button
         type="button"
         onClick={ui.openPalette}
-        className="flex h-12 w-full items-center gap-3 rounded-xl border border-line bg-surface px-4 text-left text-muted shadow-sm transition hover:border-accent/50"
+        className="flex h-10 cursor-pointer items-center gap-2 rounded-lg bg-field px-3 text-faint md:hidden"
       >
-        <Search size={18} />
-        <span className="flex-1">搜索文档，回车直接打开…</span>
-        <span className="hidden gap-1 sm:flex">
-          <Kbd>{mod}</Kbd>
-          <Kbd>K</Kbd>
-        </span>
+        <Search size={18} className="text-icon" />
+        搜索文档、项目、标签
       </button>
 
-      {data.links.length === 0 ? (
-        <Welcome hasGroups={data.groups.length > 0} />
-      ) : (
-        <>
-          {(inbox > 0 || expiring > 0) && (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {inbox > 0 && (
-                <Notice href="/inbox" icon={<Inbox size={18} />}>
-                  收件箱有 <b>{inbox}</b> 个链接还没归类
-                </Notice>
-              )}
-              {expiring > 0 && (
-                <Notice href="/expiring" icon={<AlarmClock size={18} />} warn>
-                  <b>{expiring}</b> 个分享链接快到期或已过期
-                </Notice>
-              )}
-            </div>
+      {(inbox > 0 || expiring.length > 0) && (
+        <div className="-mb-1 flex flex-col gap-2">
+          {inbox > 0 && (
+            <Banner action={<NextLink href="/inbox">去整理</NextLink>}>收件箱里有 {inbox} 个链接还没归类到项目</Banner>
           )}
-
-          {pinned.length > 0 && (
-            <Section title="收藏与置顶" icon={<Star size={16} />} href="/favorites">
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {pinned.slice(0, 9).map((l) => (
-                  <QuickLink key={l.id} link={l} sub={label(l)} />
-                ))}
-              </div>
-            </Section>
+          {expiring.length > 0 && (
+            <Banner tone="warn" action={<NextLink href="/expiring">查看</NextLink>}>
+              {expiringMessage(expiring)}
+            </Banner>
           )}
-
-          <div className="grid gap-8 lg:grid-cols-2">
-            <Section title="最近访问" icon={<Clock size={16} />} href="/recent">
-              {recent.length ? (
-                <div className="space-y-1">
-                  {recent.map((l) => (
-                    <QuickLink key={l.id} link={l} sub={`${label(l)} · ${relativeTime(l.lastVisitedAt)}`} plain />
-                  ))}
-                </div>
-              ) : (
-                <p className="text-[13px] text-muted">打开过的链接会显示在这里</p>
-              )}
-            </Section>
-            <Section title="最近添加" icon={<Plus size={16} />} href="/all">
-              <div className="space-y-1">
-                {added.map((l) => (
-                  <QuickLink key={l.id} link={l} sub={`${label(l)} · ${relativeTime(l.createdAt)}`} plain />
-                ))}
-              </div>
-            </Section>
-          </div>
-        </>
+        </div>
       )}
-    </div>
-  );
-}
 
-function Welcome({ hasGroups }: { hasGroups: boolean }) {
-  const ui = useUI();
-  const steps: [string, ReactNode][] = [
-    ["建好分组和项目", "例如分组「工作」下建项目「官网改版」，链接按项目归类"],
-    ["添加链接", "点「添加链接」，或在页面任意位置直接 Ctrl+V 粘贴链接 / 分享文案"],
-    ["随时找到", "按 Ctrl+K 搜索，回车直接打开；网盘链接会自动复制提取码"],
-  ];
-  return (
-    <div className="rounded-2xl border border-line bg-surface p-6 md:p-8">
-      <h1 className="text-xl font-semibold">欢迎使用 MyDoc 👋</h1>
-      <p className="mt-1 text-[13px] text-muted">把散落在聊天记录里的共享文档链接收集起来，分门别类，一秒打开。</p>
-      <ol className="mt-6 space-y-4">
-        {steps.map(([title, text], i) => (
-          <li key={title} className="flex gap-3">
-            <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-accent-soft text-xs font-semibold text-accent">
-              {i + 1}
-            </span>
-            <div>
-              <div className="font-medium">{title}</div>
-              <div className="text-[13px] text-muted">{text}</div>
-            </div>
-          </li>
-        ))}
-      </ol>
-      <div className="mt-6 flex flex-wrap gap-2">
-        {!hasGroups && (
-          <Button variant="primary" onClick={() => ui.editGroup()}>
-            <FolderPlus size={16} />
-            新建分组
-          </Button>
+      <section aria-labelledby="quick-title" className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <h2 id="quick-title" className="text-base leading-6 font-semibold">
+            快速访问
+          </h2>
+          <NextLink href="/favorites" className="text-[13px] text-muted hover:text-accent-text">
+            管理收藏
+          </NextLink>
+        </div>
+        {favorites.length ? (
+          <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 md:mx-0 md:grid md:grid-cols-[repeat(auto-fill,minmax(196px,1fr))] md:gap-4 md:overflow-visible md:px-0 md:pb-0">
+            {favorites.map((l) => (
+              <QuickCard key={l.id} link={l} project={label(l)} />
+            ))}
+          </div>
+        ) : (
+          <p className="rounded-lg border border-dashed border-line-strong px-4 py-5 text-center text-[13px] text-faint">
+            把常用的文档设为收藏（链接的「更多」菜单里），会显示在这里，一点就能打开
+          </p>
         )}
-        <Button variant={hasGroups ? "primary" : "secondary"} onClick={() => ui.addLink()}>
-          <Plus size={16} />
-          添加链接
-        </Button>
-        <Button onClick={() => ui.importLinks()}>
-          <Upload size={15} />
-          批量导入
-        </Button>
-      </div>
+      </section>
+
+      <section aria-label="文档列表" className="flex flex-col">
+        <div className="flex items-center justify-between gap-4 border-b border-line">
+          <Tabs
+            label="文档列表"
+            value={tab}
+            onChange={setTab}
+            items={[
+              { value: "recent", label: "最近访问" },
+              { value: "added", label: "最近添加" },
+            ]}
+          />
+          <NextLink
+            href={tab === "recent" ? "/recent" : "/all"}
+            className="shrink-0 text-[13px] text-muted hover:text-accent-text"
+          >
+            查看全部
+          </NextLink>
+        </div>
+        {lists[tab].length === 0 ? (
+          <p className="py-10 text-center text-[13px] text-faint">打开过的链接会显示在这里</p>
+        ) : (
+          <div className="md:overflow-x-auto">
+            <div className="md:min-w-[720px]">
+              <div className="hidden h-10 grid-cols-[minmax(0,2.6fr)_minmax(0,1.5fr)_minmax(0,1.3fr)_120px] items-center gap-4 border-b border-line-soft px-3 text-[13px] text-faint md:grid">
+                <span>名称</span>
+                <span>所在项目</span>
+                <span>状态</span>
+                <span className="text-right">{tab === "recent" ? "最近打开" : "添加时间"}</span>
+              </div>
+              {lists[tab].map((l) => (
+                <HomeRow
+                  key={l.id}
+                  link={l}
+                  project={label(l)}
+                  time={shortTime(tab === "recent" ? l.lastVisitedAt! : l.createdAt)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
 
-function Notice({ href, icon, warn, children }: { href: string; icon: ReactNode; warn?: boolean; children: ReactNode }) {
-  return (
-    <NextLink
-      href={href}
-      className={
-        "flex items-center gap-3 rounded-xl px-4 py-3 text-[13px] transition hover:brightness-95 " +
-        (warn ? "bg-warn-soft text-warn" : "bg-accent-soft text-accent")
-      }
-    >
-      {icon}
-      <span className="flex-1">{children}</span>
-      <ArrowRight size={16} />
-    </NextLink>
-  );
+/** 例如：3 个分享链接即将到期或已过期，其中「合同扫描件」已于 10月10日 过期 */
+function expiringMessage(links: Link[]): string {
+  const head = `${links.length} 个分享链接即将到期或已过期`;
+  const expired = links.filter((l) => daysUntil(l.expiresAt!) < 0);
+  if (expired.length) {
+    const last = expired[expired.length - 1];
+    return `${head}，其中「${last.title}」已于 ${shortDate(last.expiresAt!)} 过期`;
+  }
+  const first = links[0];
+  return `${head}，最近的「${first.title}」${expiryInfo(first.expiresAt!).label}`;
 }
 
-function Section({ title, icon, href, children }: { title: string; icon: ReactNode; href: string; children: ReactNode }) {
-  return (
-    <section>
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="flex items-center gap-2 font-semibold">
-          <span className="text-muted">{icon}</span>
-          {title}
-        </h2>
-        <NextLink href={href} className="text-[13px] text-muted hover:text-accent">
-          查看全部
-        </NextLink>
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function QuickLink({ link, sub, plain }: { link: Link; sub: string; plain?: boolean }) {
+function OpenLink({ link, className, children }: { link: Link; className?: string; children: ReactNode }) {
   const actions = useLinkActions();
   return (
     <a
@@ -191,20 +153,174 @@ function QuickLink({ link, sub, plain }: { link: Link; sub: string; plain?: bool
       rel="noopener noreferrer"
       onClick={() => actions.afterOpen(link)}
       onAuxClick={(e) => e.button === 1 && actions.afterOpen(link)}
-      title={`${link.title}\n${platformLabel(link.url)}`}
-      className={
-        "flex items-center gap-3 rounded-lg px-3 py-2 transition " +
-        (plain ? "hover:bg-surface" : "border border-line bg-surface hover:border-accent/40 hover:shadow-sm")
-      }
+      className={className}
     >
-      <PlatformIcon url={link.url} size={28} />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate font-medium">{link.title}</span>
-        <span className="block truncate text-xs text-muted">{sub}</span>
-      </span>
-      {link.accessCode && (
-        <span className="shrink-0 rounded bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-muted">{link.accessCode}</span>
-      )}
+      {children}
     </a>
+  );
+}
+
+function QuickCard({ link, project }: { link: Link; project: string }) {
+  return (
+    <OpenLink
+      link={link}
+      className="flex w-40 shrink-0 flex-col gap-3 rounded-lg border border-line-strong bg-surface p-3.5 transition-shadow hover:shadow-card md:w-auto"
+    >
+      <span className="flex items-start justify-between">
+        <DocIcon url={link.url} size={36} />
+        <StarIcon size={15} />
+      </span>
+      <span className="flex min-w-0 flex-col">
+        <span className="truncate font-medium" title={link.title}>
+          {link.title}
+        </span>
+        <span className="truncate text-xs leading-5 text-faint">{platformLabel(link.url)}</span>
+      </span>
+      <span className="flex items-center justify-between gap-2 border-t border-line-soft pt-2.5 text-xs leading-5 text-muted">
+        <span className="truncate">{project}</span>
+        {link.accessCode && (
+          <span className="shrink-0 rounded border border-line-strong px-1.5 font-mono text-fg">{link.accessCode}</span>
+        )}
+      </span>
+    </OpenLink>
+  );
+}
+
+function HomeRow({ link, project, time }: { link: Link; project: string; time: string }) {
+  const actions = useLinkActions();
+  return (
+    <div className="relative flex min-h-[60px] items-center gap-3 border-b border-line-soft md:grid md:min-h-[52px] md:grid-cols-[minmax(0,2.6fr)_minmax(0,1.5fr)_minmax(0,1.3fr)_120px] md:gap-4 md:px-3 md:hover:bg-hover">
+      <span className="flex min-w-0 flex-1 items-center gap-3 md:gap-2.5">
+        <DocIcon url={link.url} size={28} className="max-md:size-[34px]! max-md:rounded-lg!" />
+        <span className="flex min-w-0 flex-col">
+          <a
+            href={link.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => actions.afterOpen(link)}
+            onAuxClick={(e) => e.button === 1 && actions.afterOpen(link)}
+            title={link.title}
+            className="truncate outline-none after:absolute after:inset-0 hover:text-accent-text focus-visible:after:ring-2 focus-visible:after:ring-accent"
+          >
+            {link.title}
+          </a>
+          <span className="truncate text-xs leading-[18px] text-faint">
+            <span className="max-md:hidden">{platformLabel(link.url)}</span>
+            <span className="md:hidden">
+              {project} · {time}
+            </span>
+          </span>
+        </span>
+      </span>
+      <span className="hidden min-w-0 items-center gap-2 text-muted md:flex">
+        <ProjectDot id={link.projectId} />
+        <span className="truncate">{project}</span>
+      </span>
+      <span className="flex shrink-0 flex-wrap gap-1 max-md:[&>*:not(:first-child)]:hidden">
+        {link.accessCode && <CodeChip code={link.accessCode} />}
+        {link.expiresAt && <ExpiryChip date={link.expiresAt} />}
+      </span>
+      <span className="hidden text-right text-[13px] text-faint md:block">{time}</span>
+    </div>
+  );
+}
+
+function Welcome({ hasGroups }: { hasGroups: boolean }) {
+  const ui = useUI();
+  const mod = useModKey();
+  const steps: [string, ReactNode][] = [
+    ["建好分组和项目", "例如分组「工作」下建项目「官网改版」，链接按项目归类"],
+    ["添加链接", <>点「新建 → 添加链接」，或在页面任意位置直接 {mod} + V 粘贴链接、分享文案</>],
+    [
+      "随时找到",
+      <>
+        按 <Kbd>{mod} K</Kbd> 搜索，回车直接打开；网盘链接打开时会自动复制提取码
+      </>,
+    ],
+  ];
+  return (
+    <div className="mx-auto flex w-full max-w-[1180px] flex-col px-4 pt-4 pb-12 md:px-8 md:pt-6">
+      <EmptyState
+        title="欢迎使用 MyDoc"
+        actions={
+          <>
+            {!hasGroups && (
+              <Button variant="primary" size="lg" onClick={() => ui.editGroup()}>
+                <FolderPlus size={16} />
+                新建分组
+              </Button>
+            )}
+            <Button variant={hasGroups ? "primary" : "secondary"} size="lg" onClick={() => ui.addLink()}>
+              <Plus size={16} />
+              添加链接
+            </Button>
+            <Button size="lg" onClick={() => ui.importLinks()}>
+              <Upload size={15} />
+              批量导入
+            </Button>
+          </>
+        }
+      >
+        <p>把散落在聊天记录里的共享文档、表格、网盘链接收集起来，分项目归类，一秒打开。</p>
+        <ol className="mx-auto mt-6 flex max-w-md flex-col gap-4 text-left">
+          {steps.map(([title, text], i) => (
+            <li key={title} className="flex gap-3">
+              <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-accent-soft text-xs font-semibold text-accent-text">
+                {i + 1}
+              </span>
+              <span>
+                <span className="block font-medium text-fg">{title}</span>
+                <span className="block text-[13px]">{text}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      </EmptyState>
+    </div>
+  );
+}
+
+/** 工作台加载中的骨架屏 */
+function HomeSkeleton() {
+  return (
+    <div aria-busy="true" className="mx-auto flex w-full max-w-[1180px] flex-col gap-7 px-4 pt-4 md:px-8 md:pt-6">
+      <p role="status" className="sr-only">
+        正在加载工作台
+      </p>
+      <Skeleton className="h-10" />
+      <section className="flex flex-col gap-3">
+        <Skeleton className="h-4 w-20 rounded-lg" />
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(196px,1fr))] gap-4">
+          {["78%", "62%", "84%", "70%", "58%"].map((w) => (
+            <div key={w} className="flex flex-col gap-3 rounded-lg border border-line-soft p-3.5">
+              <Skeleton className="size-9 rounded-lg" />
+              <span className="flex flex-col gap-2">
+                <Skeleton className="h-[13px]" style={{ width: w }} />
+                <Skeleton className="h-2.5 w-[56%]" />
+              </span>
+              <span className="border-t border-line-soft pt-2.5">
+                <Skeleton className="h-2.5 w-[64%]" />
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
+      <section className="flex flex-col">
+        <div className="flex h-11 items-center gap-6 border-b border-line">
+          <Skeleton className="h-3.5 w-16" />
+          <Skeleton className="h-3.5 w-16" />
+        </div>
+        {["42%", "56%", "38%", "50%", "44%", "34%", "48%"].map((w, i) => (
+          <div key={i} className="flex h-14 items-center gap-3 border-b border-line-soft md:px-3">
+            <Skeleton className="size-7 shrink-0 rounded-md" />
+            <span className="flex flex-1 flex-col gap-1.5">
+              <Skeleton style={{ width: w }} />
+              <Skeleton className="h-2.5 w-[36%]" />
+            </span>
+            <Skeleton className="hidden w-16 md:block" />
+          </div>
+        ))}
+      </section>
+    </div>
   );
 }

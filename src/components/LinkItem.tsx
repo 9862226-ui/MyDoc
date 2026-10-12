@@ -1,13 +1,24 @@
 "use client";
 
-import { Copy, Eye, KeyRound, Pencil, Pin, PinOff, Star, Trash2, ExternalLink, ClipboardList } from "lucide-react";
+import {
+  ClipboardList,
+  Copy,
+  ExternalLink,
+  ListChecks,
+  Pencil,
+  Pin,
+  PinOff,
+  Star,
+  StarOff,
+  Trash2,
+} from "lucide-react";
 import NextLink from "next/link";
-import type { DragEvent, MouseEvent } from "react";
+import type { DragEvent } from "react";
 import { copyText } from "@/lib/client";
-import { expiryInfo, relativeTime } from "@/lib/format";
-import { hostOf, platformLabel } from "@/lib/platforms";
+import { expiryInfo, shortTime } from "@/lib/format";
+import { platformLabel } from "@/lib/platforms";
 import type { Link } from "@/lib/types";
-import { cx, IconButton, Menu, PlatformIcon, type MenuItem } from "./ui";
+import { Checkbox, cx, DocIcon, IconButton, Menu, ProjectDot, StarIcon, Tag, type MenuItem } from "./ui";
 import { useLinkActions, useUI } from "./ui-context";
 
 export interface LinkItemProps {
@@ -16,29 +27,46 @@ export interface LinkItemProps {
   project?: { id: number | null; label: string };
   selected: boolean;
   selecting: boolean;
-  onSelect: (e: MouseEvent) => void;
+  /** 选中或取消；shift 为真时选中一段 */
+  onSelect: (shift: boolean) => void;
   onDragStart: (e: DragEvent) => void;
 }
 
-function useItemMenu(link: Link): MenuItem[] {
+/** 列表视图的列宽：勾选 / 名称 / (所在项目) / 标签 / 状态 / 最近打开 / 操作 */
+const COLS = "md:grid-cols-[28px_minmax(0,3fr)_minmax(0,1.3fr)_minmax(0,1.5fr)_110px_72px]";
+const COLS_WITH_PROJECT =
+  "md:grid-cols-[28px_minmax(0,2.6fr)_minmax(0,1.3fr)_minmax(0,1.2fr)_minmax(0,1.4fr)_110px_72px]";
+
+function useItemMenu(link: Link, onSelect?: () => void): MenuItem[] {
   const ui = useUI();
   const actions = useLinkActions();
   return [
-    { label: "打开", icon: <ExternalLink size={14} />, onSelect: () => actions.open(link) },
-    { label: "编辑", icon: <Pencil size={14} />, onSelect: () => ui.editLink(link) },
+    { label: "打开", icon: <ExternalLink size={15} />, onSelect: () => actions.open(link) },
+    { label: "编辑", icon: <Pencil size={15} />, onSelect: () => ui.editLink(link) },
     { divider: true },
-    { label: link.accessCode ? "复制链接和提取码" : "复制链接", icon: <Copy size={14} />, onSelect: () => void actions.copy(link) },
-    { label: "复制为分享文本", icon: <ClipboardList size={14} />, onSelect: () => void actions.copy(link, true) },
+    {
+      label: link.accessCode ? "复制链接和提取码" : "复制链接",
+      icon: <Copy size={15} />,
+      onSelect: () => void actions.copy(link),
+    },
+    { label: "复制为分享文本", icon: <ClipboardList size={15} />, onSelect: () => void actions.copy(link, true) },
+    {
+      label: link.favorite ? "取消收藏" : "收藏",
+      icon: link.favorite ? <StarOff size={15} /> : <Star size={15} />,
+      onSelect: () => void actions.toggleFavorite(link),
+    },
     {
       label: link.pinned ? "取消置顶" : "置顶",
-      icon: link.pinned ? <PinOff size={14} /> : <Pin size={14} />,
+      icon: link.pinned ? <PinOff size={15} /> : <Pin size={15} />,
       onSelect: () => void actions.togglePin(link),
     },
+    { label: "多选", icon: <ListChecks size={15} />, onSelect: () => onSelect?.(), hidden: !onSelect },
     { divider: true },
-    { label: "删除", icon: <Trash2 size={14} />, danger: true, onSelect: () => void actions.remove([link.id]) },
+    { label: "删除", icon: <Trash2 size={15} />, danger: true, onSelect: () => void actions.remove([link.id]) },
   ];
 }
 
+/** 标题链接；after 伪元素铺满整行 / 整张卡片，点哪里都能打开 */
 function TitleLink({ link, className }: { link: Link; className?: string }) {
   const actions = useLinkActions();
   return (
@@ -49,240 +77,290 @@ function TitleLink({ link, className }: { link: Link; className?: string }) {
       draggable={false}
       onClick={() => actions.afterOpen(link)}
       onAuxClick={(e) => e.button === 1 && actions.afterOpen(link)}
-      className={className}
-      title={link.title}
+      className={cx("truncate outline-none after:absolute after:inset-0 hover:text-accent-text", className)}
+      title={link.note ? `${link.title}\n${link.note}` : link.title}
     >
-      {link.pinned && <Pin size={13} className="mr-1 inline -translate-y-px text-accent" />}
       {link.title}
     </a>
   );
 }
 
-function Checkbox({ checked, onClick, className }: { checked: boolean; onClick: (e: MouseEvent) => void; className?: string }) {
-  return (
-    <button
-      type="button"
-      role="checkbox"
-      aria-checked={checked}
-      aria-label="选择"
-      onClick={onClick}
-      className={cx(
-        "relative z-10 flex size-[18px] items-center justify-center rounded border-[1.5px] transition",
-        checked ? "border-accent bg-accent text-accent-fg" : "border-muted/60 bg-surface hover:border-accent",
-        className,
-      )}
-    >
-      {checked && (
-        <svg viewBox="0 0 12 12" className="size-3" aria-hidden>
-          <path d="M2.5 6.2 5 8.5l4.5-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      )}
-    </button>
-  );
-}
-
-function AccessCode({ link }: { link: Link }) {
+/** 点击复制提取码 */
+export function CodeChip({ code, label = true, className }: { code: string; label?: boolean; className?: string }) {
   const ui = useUI();
   return (
     <button
       type="button"
       onClick={async () => {
-        const ok = await copyText(link.accessCode);
-        ui.toast(ok ? `已复制提取码 ${link.accessCode}` : "复制失败", { kind: ok ? "ok" : "error" });
+        const ok = await copyText(code);
+        ui.toast(ok ? `已复制提取码 ${code}` : "复制失败", { kind: ok ? "ok" : "error" });
       }}
       title="点击复制提取码"
-      className="relative z-10 inline-flex h-6 items-center gap-1 rounded-md bg-surface-2 px-1.5 font-mono text-xs hover:bg-accent-soft hover:text-accent"
+      className={cx(
+        "relative z-10 inline-flex h-5 shrink-0 cursor-pointer items-center rounded border border-line-strong px-1.5 font-mono text-xs text-fg transition-colors hover:border-accent hover:text-accent-text",
+        className,
+      )}
     >
-      <KeyRound size={12} />
-      {link.accessCode}
+      {label && "提取码 "}
+      {code}
     </button>
   );
 }
 
-function Expiry({ date }: { date: string }) {
+export function ExpiryChip({ date }: { date: string }) {
   const info = expiryInfo(date);
   return (
-    <span
-      className={cx(
-        "inline-flex h-6 items-center rounded-md px-1.5 text-xs",
-        info.level === "expired" && "bg-danger-soft text-danger",
-        info.level === "soon" && "bg-warn-soft text-warn",
-        info.level === "later" && "text-muted",
-      )}
+    <Tag
+      tone={info.level === "expired" ? "danger" : info.level === "soon" ? "warn" : "default"}
+      title={`到期日期 ${date}`}
     >
       {info.label}
-    </span>
+    </Tag>
   );
 }
 
-function TagChips({ tags }: { tags: string[] }) {
+export function TagLink({ name, className }: { name: string; className?: string }) {
   return (
-    <>
-      {tags.map((t) => (
-        <NextLink
-          key={t}
-          href={`/t/${encodeURIComponent(t)}`}
-          draggable={false}
-          className="relative z-10 inline-flex h-6 items-center rounded-md px-1.5 text-xs text-accent hover:bg-accent-soft"
-        >
-          #{t}
-        </NextLink>
-      ))}
-    </>
-  );
-}
-
-export function LinkCard({ link, project, selected, selecting, onSelect, onDragStart }: LinkItemProps) {
-  const actions = useLinkActions();
-  const menu = useItemMenu(link);
-  const host = hostOf(link.url);
-
-  return (
-    <div
-      draggable
-      onDragStart={onDragStart}
+    <NextLink
+      href={`/t/${encodeURIComponent(name)}`}
+      draggable={false}
       className={cx(
-        "group/card relative flex flex-col sm:min-h-36 rounded-xl border bg-surface p-3.5 transition",
-        selected ? "border-accent ring-2 ring-accent/25" : "border-line hover:border-accent/40 hover:shadow-sm",
+        "relative z-10 inline-flex max-w-full shrink-0 items-center truncate rounded bg-field px-1.5 text-xs leading-5 text-muted hover:text-accent-text",
+        className,
       )}
     >
-      <div className="flex items-start gap-3">
-        <div className="relative shrink-0">
-          <PlatformIcon url={link.url} size={36} />
-          <Checkbox
-            checked={selected}
-            onClick={onSelect}
-            className={cx(
-              "absolute -top-1.5 -left-1.5",
-              !selecting && !selected && "opacity-0 group-hover/card:opacity-100 focus:opacity-100",
-            )}
-          />
-        </div>
-        <div className="min-w-0 flex-1 pr-14">
-          <TitleLink
-            link={link}
-            className="line-clamp-2 leading-snug font-medium break-all outline-none after:absolute after:inset-0 after:rounded-xl hover:text-accent focus-visible:after:ring-2 focus-visible:after:ring-accent"
-          />
-          <div className="mt-0.5 truncate text-xs text-muted" title={link.url}>
-            {platformLabel(link.url)} · {host}
-          </div>
-        </div>
-      </div>
+      {name}
+    </NextLink>
+  );
+}
 
-      <div className="absolute top-2.5 right-2 z-10 flex items-center">
-        <IconButton
-          label={link.favorite ? "取消收藏" : "收藏"}
-          onClick={() => void actions.toggleFavorite(link)}
-          className={cx(
-            "size-7",
-            link.favorite ? "text-amber-500 hover:text-amber-500" : "opacity-0 group-hover/card:opacity-100 focus:opacity-100 pointer-coarse:opacity-100",
-          )}
-        >
-          <Star size={15} fill={link.favorite ? "currentColor" : "none"} />
-        </IconButton>
-        <span className="opacity-0 group-hover/card:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
-          <Menu items={menu} className="size-7" />
-        </span>
-      </div>
+function visitedLabel(link: Link): string {
+  return link.lastVisitedAt ? shortTime(link.lastVisitedAt) : "未打开";
+}
 
-      {link.note && <p className="mt-2 line-clamp-2 text-[13px] text-muted">{link.note}</p>}
-
-      <div className="mt-auto flex flex-wrap items-center gap-1 pt-3">
-        {link.accessCode && <AccessCode link={link} />}
-        {link.expiresAt && <Expiry date={link.expiresAt} />}
-        <TagChips tags={link.tags} />
-        <span className="ml-auto flex items-center gap-2 pl-1 text-xs text-muted">
-          {project && (
-            <NextLink
-              href={project.id === null ? "/inbox" : `/p/${project.id}`}
-              draggable={false}
-              className="relative z-10 max-w-32 truncate hover:text-accent"
-              title={project.label}
-            >
-              {project.label}
-            </NextLink>
-          )}
-          <span className="inline-flex items-center gap-0.5" title={`访问 ${link.visitCount} 次，最近：${relativeTime(link.lastVisitedAt)}`}>
-            <Eye size={12} />
-            {link.visitCount}
-          </span>
-        </span>
-      </div>
+/** 列表视图的表头 */
+export function LinkTableHeader({
+  showProject,
+  checked,
+  indeterminate,
+  onToggleAll,
+}: {
+  showProject: boolean;
+  checked: boolean;
+  indeterminate: boolean;
+  onToggleAll: () => void;
+}) {
+  return (
+    <div
+      className={cx(
+        "hidden h-10 items-center gap-4 border-b border-line px-3 text-[13px] text-faint md:grid",
+        showProject ? COLS_WITH_PROJECT : COLS,
+      )}
+    >
+      <Checkbox checked={checked} indeterminate={indeterminate} onChange={onToggleAll} aria-label="全选" />
+      <span>名称</span>
+      {showProject && <span>所在项目</span>}
+      <span>标签</span>
+      <span>状态</span>
+      <span className="text-right">最近打开</span>
+      <span />
     </div>
   );
 }
 
+/** 列表视图的一行；手机上变成两行文字的紧凑列表 */
 export function LinkRow({ link, project, selected, selecting, onSelect, onDragStart }: LinkItemProps) {
   const actions = useLinkActions();
-  const menu = useItemMenu(link);
+  const menu = useItemMenu(link, () => onSelect(false));
+  const hasStatus = !!(link.accessCode || link.expiresAt);
 
   return (
     <div
       draggable
       onDragStart={onDragStart}
       className={cx(
-        "group/row relative flex items-center gap-3 border-b border-line px-3 py-2 last:border-b-0",
-        selected ? "bg-accent-soft" : "hover:bg-surface-2",
+        "group/row relative flex items-center gap-3 border-b border-line-soft py-3 max-md:-mx-4 max-md:px-4 md:grid md:min-h-14 md:gap-4 md:px-3 md:py-2",
+        project ? COLS_WITH_PROJECT : COLS,
+        selected ? "bg-accent-soft" : "md:hover:bg-hover",
       )}
     >
-      <Checkbox
-        checked={selected}
-        onClick={onSelect}
-        className={cx(!selecting && !selected && "opacity-0 group-hover/row:opacity-100 focus:opacity-100 pointer-coarse:opacity-100")}
-      />
-      <PlatformIcon url={link.url} size={26} />
-      <div className="min-w-0 flex-1">
-        <TitleLink
-          link={link}
-          className="block truncate font-medium outline-none after:absolute after:inset-0 hover:text-accent focus-visible:underline"
+      <span className={cx("relative z-10 flex items-center", !selecting && "max-md:hidden")}>
+        <Checkbox
+          checked={selected}
+          onChange={() => {}}
+          onClick={(e) => onSelect(e.shiftKey)}
+          aria-label={`选择 ${link.title}`}
         />
-        <div className="flex items-center gap-1.5 truncate text-xs text-muted">
-          <span className="truncate">{platformLabel(link.url)}</span>
-          {project && (
-            <>
-              <span>·</span>
+      </span>
+
+      <span className="flex min-w-0 flex-1 items-center gap-3 md:gap-2.5">
+        <DocIcon url={link.url} size={30} />
+        <span className="flex min-w-0 flex-col">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <TitleLink link={link} className="max-md:font-medium" />
+            {link.pinned && <Tag tone="pin">置顶</Tag>}
+            {link.favorite && <StarIcon size={13} />}
+          </span>
+          <span className="truncate text-xs leading-[18px] text-faint">
+            {platformLabel(link.url)}
+            {project && <span className="md:hidden"> · {project.label}</span>}
+            <span className="md:hidden">
+              {" · "}
+              {link.lastVisitedAt ? `${shortTime(link.lastVisitedAt)} 打开` : "还没打开过"}
+            </span>
+          </span>
+          {hasStatus && (
+            <span className="mt-1 flex flex-wrap gap-1 md:hidden">
+              {link.accessCode && <CodeChip code={link.accessCode} />}
+              {link.expiresAt && <ExpiryChip date={link.expiresAt} />}
+            </span>
+          )}
+        </span>
+      </span>
+
+      {project && (
+        <span className="hidden min-w-0 items-center gap-2 text-muted md:flex">
+          <ProjectDot id={project.id} />
+          <NextLink
+            href={project.id === null ? "/inbox" : `/p/${project.id}`}
+            draggable={false}
+            className="relative z-10 truncate hover:text-accent-text"
+          >
+            {project.label}
+          </NextLink>
+        </span>
+      )}
+
+      <span className="hidden min-w-0 flex-wrap gap-1 md:flex">
+        {link.tags.map((t) => (
+          <TagLink key={t} name={t} />
+        ))}
+      </span>
+
+      <span className="hidden min-w-0 flex-wrap gap-1 md:flex">
+        {link.accessCode && <CodeChip code={link.accessCode} />}
+        {link.expiresAt && <ExpiryChip date={link.expiresAt} />}
+      </span>
+
+      <span className={cx("hidden text-right text-[13px] md:block", link.lastVisitedAt ? "text-muted" : "text-faint")}>
+        {visitedLabel(link)}
+      </span>
+
+      <span className="relative z-10 flex shrink-0 justify-end gap-0.5 focus-within:opacity-100 pointer-coarse:opacity-100 md:opacity-0 md:group-hover/row:opacity-100">
+        <IconButton
+          label={link.accessCode ? "复制链接和提取码" : "复制链接"}
+          size="sm"
+          className="max-md:hidden"
+          onClick={() => void actions.copy(link)}
+        >
+          <Copy size={15} />
+        </IconButton>
+        <Menu items={menu} className="size-7" />
+      </span>
+    </div>
+  );
+}
+
+/** 卡片视图 */
+export function LinkCard({ link, project, selected, selecting, onSelect, onDragStart }: LinkItemProps) {
+  const menu = useItemMenu(link, () => onSelect(false));
+  const expiry = link.expiresAt ? expiryInfo(link.expiresAt) : null;
+
+  return (
+    <article
+      draggable
+      onDragStart={onDragStart}
+      className={cx(
+        "group/card relative flex flex-col gap-3.5 rounded-lg border bg-surface p-4 transition-[box-shadow,border-color]",
+        selected ? "border-accent ring-2 ring-accent/20" : "border-line-strong hover:shadow-card",
+      )}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <span className="relative">
+          <DocIcon url={link.url} size={44} />
+          <span
+            className={cx(
+              "absolute -top-2 -left-2 z-10 flex rounded bg-surface p-0.5 shadow-[0_1px_3px_var(--shadow)]",
+              !selecting && !selected && "opacity-0 group-hover/card:opacity-100 focus-within:opacity-100",
+            )}
+          >
+            <Checkbox
+              checked={selected}
+              onChange={() => {}}
+              onClick={(e) => onSelect(e.shiftKey)}
+              aria-label={`选择 ${link.title}`}
+            />
+          </span>
+        </span>
+        <span className="flex items-center gap-1.5 pointer-coarse:mr-8">
+          {link.pinned && <Tag tone="pin">置顶</Tag>}
+          {link.favorite && <StarIcon size={16} />}
+        </span>
+        {/* 悬停时盖在置顶 / 星标上方 */}
+        <span className="absolute top-3 right-3 z-10 rounded-md bg-surface opacity-0 group-hover/card:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
+          <Menu items={menu} className="size-7" />
+        </span>
+      </div>
+
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <TitleLink link={link} className="text-[15px] font-medium after:rounded-lg" />
+        <span className="truncate text-xs leading-5 text-faint">{platformLabel(link.url)}</span>
+      </div>
+
+      {link.note && <p className="-mt-1.5 line-clamp-2 text-[13px] text-muted">{link.note}</p>}
+
+      <dl className="flex flex-col gap-1.5 border-t border-line-soft pt-3 text-[13px]">
+        {project && (
+          <div className="flex justify-between gap-2">
+            <dt className="shrink-0 text-faint">所在项目</dt>
+            <dd className="min-w-0 truncate">
               <NextLink
                 href={project.id === null ? "/inbox" : `/p/${project.id}`}
                 draggable={false}
-                className="relative z-10 truncate hover:text-accent"
+                className="relative z-10 hover:text-accent-text"
               >
                 {project.label}
               </NextLink>
-            </>
-          )}
+            </dd>
+          </div>
+        )}
+        {link.accessCode && (
+          <div className="flex justify-between gap-2">
+            <dt className="text-faint">提取码</dt>
+            <dd>
+              <CodeChip code={link.accessCode} label={false} className="h-auto border-0 px-0 text-[13px]" />
+            </dd>
+          </div>
+        )}
+        {expiry && (
+          <div className="flex justify-between gap-2">
+            <dt className="text-faint">有效期</dt>
+            <dd
+              className={cx(
+                expiry.level === "expired"
+                  ? "text-danger-text"
+                  : expiry.level === "soon"
+                    ? "text-warn-text"
+                    : "text-fg",
+              )}
+            >
+              {expiry.label}
+            </dd>
+          </div>
+        )}
+        <div className="flex justify-between gap-2">
+          <dt className="text-faint">最近打开</dt>
+          <dd className={link.lastVisitedAt ? "" : "text-faint"}>{visitedLabel(link)}</dd>
         </div>
-      </div>
-      <div className="hidden max-w-60 shrink-0 flex-wrap justify-end gap-1 md:flex">
-        <TagChips tags={link.tags.slice(0, 3)} />
-      </div>
-      {link.expiresAt && (
-        <span className="hidden shrink-0 sm:block">
-          <Expiry date={link.expiresAt} />
-        </span>
+      </dl>
+
+      {link.tags.length > 0 && (
+        <div className="mt-auto flex flex-wrap gap-1">
+          {link.tags.map((t) => (
+            <TagLink key={t} name={t} className="leading-[22px]" />
+          ))}
+        </div>
       )}
-      {link.accessCode && (
-        <span className="hidden shrink-0 sm:block">
-          <AccessCode link={link} />
-        </span>
-      )}
-      <span className="hidden w-20 shrink-0 text-right text-xs text-muted lg:block" title="最近访问">
-        {link.lastVisitedAt ? relativeTime(link.lastVisitedAt) : "未访问"}
-      </span>
-      <span className="relative z-10 flex shrink-0 items-center">
-        <IconButton
-          label={link.favorite ? "取消收藏" : "收藏"}
-          onClick={() => void actions.toggleFavorite(link)}
-          className={cx(
-            "size-7",
-            link.favorite ? "text-amber-500 hover:text-amber-500" : "opacity-0 group-hover/row:opacity-100 focus:opacity-100 pointer-coarse:opacity-100",
-          )}
-        >
-          <Star size={15} fill={link.favorite ? "currentColor" : "none"} />
-        </IconButton>
-        <span className="opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
-          <Menu items={menu} className="size-7" />
-        </span>
-      </span>
-    </div>
+    </article>
   );
 }
