@@ -332,7 +332,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                                 else if (dragged && dragged !== p.id) reorderProjects(g.id, dragged, p.id);
                               }}
                               className={cx(
-                                "flex h-8 items-center gap-2 rounded-md pr-2 pl-6 text-[13px]",
+                                "flex h-8 items-center gap-2 rounded-md pr-2 pl-6 text-[13px] pointer-coarse:pr-9",
                                 active ? "bg-accent-soft font-medium text-accent" : "hover:bg-surface-2",
                                 p.archived && "text-muted",
                                 drop?.key === pkey && drop.mode === "into" && "bg-accent-soft ring-1 ring-accent",
