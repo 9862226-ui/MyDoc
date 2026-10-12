@@ -20,7 +20,7 @@ export interface ConfirmOptions {
 }
 
 export interface ToastOptions {
-  kind?: "ok" | "error";
+  kind?: "ok" | "error" | "info";
   action?: { label: string; onClick: () => void };
 }
 

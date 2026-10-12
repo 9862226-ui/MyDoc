@@ -1,16 +1,17 @@
 "use client";
 
-import { Menu as MenuIcon, Plus, Search } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { parseShareText } from "@/lib/share-text";
 import type { Group, Link, Project } from "@/lib/types";
 import { CommandPalette } from "./CommandPalette";
 import { AddTagsDialog, ConfirmDialog, GroupDialog, ProjectDialog } from "./dialogs";
+import { HelpDialog } from "./HelpDialog";
 import { ImportDialog } from "./ImportDialog";
 import { LinkDialog } from "./LinkDialog";
 import { Sidebar } from "./Sidebar";
-import { cx, IconButton } from "./ui";
+import { MobileHeader, TabBar, TopBar } from "./Topbar";
+import { ToastCard } from "./ui";
 import { UIContext, type ConfirmOptions, type LinkInit, type ToastOptions, type UI } from "./ui-context";
 
 interface Toast extends ToastOptions {
@@ -43,7 +44,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     null,
   );
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const toastId = useRef(0);
 
   const projectMatch = pathname.match(/^\/p\/(\d+)/);
@@ -110,42 +111,21 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <UIContext.Provider value={ui}>
       <div className="flex h-dvh">
-        {/* 桌面端侧边栏 */}
-        <aside className="hidden w-64 shrink-0 border-r border-line md:block">
+        {/* 桌面端侧边栏；手机端用底部标签栏，项目列表在「项目」页 */}
+        <aside className="hidden w-60 shrink-0 border-r border-line md:block">
           <Sidebar />
         </aside>
-
-        {/* 手机端抽屉 */}
-        <div className={cx("fixed inset-0 z-40 md:hidden", !drawerOpen && "pointer-events-none")}>
-          <div
-            className={cx("absolute inset-0 bg-black/40 transition-opacity", drawerOpen ? "opacity-100" : "opacity-0")}
-            onClick={() => setDrawerOpen(false)}
-          />
-          <aside
-            className={cx(
-              "absolute inset-y-0 left-0 w-72 max-w-[85vw] shadow-xl transition-transform",
-              drawerOpen ? "translate-x-0" : "-translate-x-full",
-            )}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <TopBar onHelp={() => setHelpOpen(true)} />
+          <main
+            id="main"
+            className="min-h-0 flex-1 overflow-y-auto pb-[calc(96px+env(safe-area-inset-bottom))] md:pb-0"
           >
-            <Sidebar onNavigate={() => setDrawerOpen(false)} />
-          </aside>
+            <MobileHeader />
+            {children}
+          </main>
         </div>
-
-        <main className="min-w-0 flex-1 overflow-y-auto">
-          <div className="sticky top-0 z-20 flex items-center gap-1 border-b border-line bg-surface/90 px-2 py-1.5 backdrop-blur md:hidden">
-            <IconButton label="菜单" onClick={() => setDrawerOpen(true)}>
-              <MenuIcon size={18} />
-            </IconButton>
-            <span className="flex-1 font-semibold">MyDoc</span>
-            <IconButton label="搜索" onClick={() => setPaletteOpen(true)}>
-              <Search size={18} />
-            </IconButton>
-            <IconButton label="添加链接" onClick={() => setLinkDialog({ open: true })}>
-              <Plus size={18} />
-            </IconButton>
-          </div>
-          {children}
-        </main>
+        <TabBar />
       </div>
 
       <LinkDialog
@@ -176,29 +156,27 @@ export function AppShell({ children }: { children: ReactNode }) {
         }}
       />
 
-      <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-5 z-50 flex flex-col items-center gap-2 px-4">
+      <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
+
+      <div
+        aria-live="polite"
+        className="pointer-events-none fixed inset-x-0 top-3 z-[60] flex flex-col items-center gap-2 px-4 md:top-4"
+      >
         {toasts.map((t) => (
-          <div
+          <ToastCard
             key={t.id}
-            className={cx(
-              "pointer-events-auto flex items-center gap-3 rounded-lg px-4 py-2.5 text-[13px] shadow-lg",
-              t.kind === "error" ? "bg-danger text-white" : "bg-fg text-bg",
-            )}
-          >
-            <span>{t.message}</span>
-            {t.action && (
-              <button
-                type="button"
-                className="font-semibold underline-offset-2 hover:underline"
-                onClick={() => {
+            tone={t.kind === "error" ? "error" : t.kind === "info" ? "info" : "success"}
+            message={t.message}
+            action={
+              t.action && {
+                label: t.action.label,
+                onClick: () => {
                   t.action!.onClick();
                   setToasts((all) => all.filter((x) => x.id !== t.id));
-                }}
-              >
-                {t.action.label}
-              </button>
-            )}
-          </div>
+                },
+              }
+            }
+          />
         ))}
       </div>
     </UIContext.Provider>

@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type ButtonHTMLAttributes,
+  type CSSProperties,
   type FocusEvent as ReactFocusEvent,
   type InputHTMLAttributes,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -48,7 +49,15 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   ref?: Ref<HTMLButtonElement>;
 };
 
-export function Button({ variant = "secondary", size = "md", loading, disabled, className, children, ...props }: ButtonProps) {
+export function Button({
+  variant = "secondary",
+  size = "md",
+  loading,
+  disabled,
+  className,
+  children,
+  ...props
+}: ButtonProps) {
   return (
     <button
       type="button"
@@ -195,7 +204,10 @@ function TooltipBubble({ anchor, label }: { anchor: DOMRect; label: string }) {
 const FIELD_CLASS =
   "w-full rounded-md border border-control bg-surface px-2.5 text-fg outline-none transition-[border-color,box-shadow] placeholder:text-icon hover:border-accent/60 focus:border-accent focus:ring-2 focus:ring-accent/15 disabled:cursor-not-allowed disabled:bg-field disabled:text-faint aria-[invalid=true]:border-danger";
 
-export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement> & { ref?: Ref<HTMLInputElement> }) {
+export function Input({
+  className,
+  ...props
+}: InputHTMLAttributes<HTMLInputElement> & { ref?: Ref<HTMLInputElement> }) {
   return <input className={cx(FIELD_CLASS, "h-9", className)} {...props} />;
 }
 
@@ -242,7 +254,10 @@ export function SearchField({
       <SearchIcon size={variant === "filled" ? 16 : 14} />
       <input
         type="search"
-        className={cx("h-full min-w-0 flex-1 bg-transparent text-fg outline-none placeholder:text-faint", inputClassName)}
+        className={cx(
+          "h-full min-w-0 flex-1 bg-transparent text-fg outline-none placeholder:text-faint",
+          inputClassName,
+        )}
         {...props}
       />
       {trailing}
@@ -252,7 +267,17 @@ export function SearchField({
 
 function SearchIcon({ size }: { size: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="shrink-0 text-icon" aria-hidden>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      className="shrink-0 text-icon"
+      aria-hidden
+    >
       <circle cx="11" cy="11" r="7" />
       <path d="m20 20-3.5-3.5" />
     </svg>
@@ -268,7 +293,9 @@ export function Checkbox({
   useEffect(() => {
     if (ref.current) ref.current.indeterminate = !!indeterminate;
   }, [indeterminate]);
-  return <input ref={ref} type="checkbox" className={cx("m-0 size-[15px] shrink-0 cursor-pointer", className)} {...props} />;
+  return (
+    <input ref={ref} type="checkbox" className={cx("m-0 size-[15px] shrink-0 cursor-pointer", className)} {...props} />
+  );
 }
 
 export function Field({
@@ -334,7 +361,11 @@ export function Tag({
   return (
     <span
       title={title}
-      className={cx("inline-flex max-w-full shrink-0 items-center rounded px-1.5 text-xs leading-5 whitespace-nowrap", TAG_TONES[tone], className)}
+      className={cx(
+        "inline-flex max-w-full shrink-0 items-center rounded px-1.5 text-xs leading-5 whitespace-nowrap",
+        TAG_TONES[tone],
+        className,
+      )}
     >
       {children}
     </span>
@@ -345,8 +376,8 @@ export function Spinner({ size = 16, className }: { size?: number; className?: s
   return <LoaderCircle size={size} className={cx("shrink-0 animate-spin", className)} />;
 }
 
-export function Skeleton({ className }: { className?: string }) {
-  return <span aria-hidden className={cx("skeleton block h-3 rounded-md", className)} />;
+export function Skeleton({ className, style }: { className?: string; style?: CSSProperties }) {
+  return <span aria-hidden style={style} className={cx("skeleton block h-3 rounded-md", className)} />;
 }
 
 /** Mac 上显示 ⌘，其他系统显示 Ctrl */
@@ -377,10 +408,22 @@ export function PlatformIcon({ url, size = 28 }: { url: string; size?: number })
 }
 
 const BANNER_TONES = {
-  info: { box: "bg-accent-soft", icon: <Info size={16} className="shrink-0 text-accent-text" />, action: "text-accent-text" },
+  info: {
+    box: "bg-accent-soft",
+    icon: <Info size={16} className="shrink-0 text-accent-text" />,
+    action: "text-accent-text",
+  },
   warn: { box: "bg-warn-soft", icon: <AlarmIcon />, action: "text-warn-text" },
-  danger: { box: "bg-danger-soft", icon: <CircleAlert size={16} className="shrink-0 text-danger" />, action: "text-danger-text" },
-  success: { box: "bg-accent-soft", icon: <CircleCheck size={16} className="shrink-0 text-success" />, action: "text-accent-text" },
+  danger: {
+    box: "bg-danger-soft",
+    icon: <CircleAlert size={16} className="shrink-0 text-danger" />,
+    action: "text-danger-text",
+  },
+  success: {
+    box: "bg-accent-soft",
+    icon: <CircleCheck size={16} className="shrink-0 text-success" />,
+    action: "text-accent-text",
+  },
 };
 
 /** 页面顶部的提醒条 */
@@ -402,7 +445,11 @@ export function Banner({
     <div role="status" className={cx("flex items-center gap-2 rounded-md px-3.5 py-[9px]", t.box, className)}>
       {icon ?? t.icon}
       <span className="min-w-0 flex-1">{children}</span>
-      {action && <span className={cx("shrink-0 font-medium [&_a]:hover:underline [&_button]:hover:underline", t.action)}>{action}</span>}
+      {action && (
+        <span className={cx("shrink-0 font-medium [&_a]:hover:underline [&_button]:hover:underline", t.action)}>
+          {action}
+        </span>
+      )}
     </div>
   );
 }
@@ -410,14 +457,33 @@ export function Banner({
 /** 闹钟图标（即将过期），橙色 */
 export function AlarmIcon({ size = 16, className }: { size?: number; className?: string }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="var(--warn)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cx("shrink-0", className)} aria-hidden>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="var(--warn)"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={cx("shrink-0", className)}
+      aria-hidden
+    >
       <circle cx="12" cy="13" r="7" />
       <path d="M12 10v3l2 2M5 3 2 6M22 6l-3-3" />
     </svg>
   );
 }
 
-export function StarIcon({ size = 14, filled = true, className }: { size?: number; filled?: boolean; className?: string }) {
+export function StarIcon({
+  size = 14,
+  filled = true,
+  className,
+}: {
+  size?: number;
+  filled?: boolean;
+  className?: string;
+}) {
   return (
     <svg
       width={size}
@@ -524,7 +590,13 @@ export function Dialog({
       }}
       className={cx(
         "m-auto w-[calc(100%-24px)] overflow-hidden rounded-xl border-0 bg-menu p-0 shadow-dialog open:animate-[dialog-in_160ms_ease-out]",
-        size === "sm" ? "max-w-[400px]" : size === "lg" ? "max-w-[720px]" : size === "xl" ? "max-w-[880px]" : "max-w-[560px]",
+        size === "sm"
+          ? "max-w-[400px]"
+          : size === "lg"
+            ? "max-w-[720px]"
+            : size === "xl"
+              ? "max-w-[880px]"
+              : "max-w-[560px]",
         className,
       )}
     >
@@ -734,7 +806,12 @@ export function Menu({
                   )}
                 >
                   {item.icon && (
-                    <span className={cx("flex w-4 shrink-0 justify-center", item.danger ? "text-danger-text" : "text-muted")}>
+                    <span
+                      className={cx(
+                        "flex w-4 shrink-0 justify-center",
+                        item.danger ? "text-danger-text" : "text-muted",
+                      )}
+                    >
                       {item.icon}
                     </span>
                   )}
@@ -879,7 +956,9 @@ export function Segmented<T extends string>({
             onClick={() => onChange(o.value)}
             className={cx(
               "flex size-7 cursor-pointer items-center justify-center rounded transition-colors",
-              selected ? "bg-surface text-fg shadow-[0_1px_2px_var(--shadow)] dark:bg-chip" : "text-muted hover:text-fg",
+              selected
+                ? "bg-surface text-fg shadow-[0_1px_2px_var(--shadow)] dark:bg-chip"
+                : "text-muted hover:text-fg",
             )}
           >
             {o.icon}

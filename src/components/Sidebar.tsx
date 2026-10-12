@@ -1,24 +1,6 @@
 "use client";
 
-import {
-  AlarmClock,
-  Archive,
-  ArchiveRestore,
-  ChevronRight,
-  Clock,
-  FolderPlus,
-  Hash,
-  House,
-  Inbox,
-  Layers,
-  LogOut,
-  Pencil,
-  Plus,
-  Search,
-  Settings,
-  Star,
-  Trash2,
-} from "lucide-react";
+import { Archive, ArchiveRestore, ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
 import NextLink from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
@@ -26,7 +8,8 @@ import { api, readLocal, refreshData, useAppData, writeLocal } from "@/lib/clien
 import type { Group, Project } from "@/lib/types";
 import { safeDecode } from "@/lib/url";
 import { isExpiring } from "@/lib/view";
-import { cx, IconButton, Kbd, Menu, Spinner, useModKey } from "./ui";
+import { NavIcon } from "./nav-icons";
+import { cx, IconButton, Logo, Menu, ProjectBadge, Skeleton, type MenuItem } from "./ui";
 import { useLinkActions, useUI } from "./ui-context";
 
 export const LINKS_MIME = "application/x-mydoc-links";
@@ -38,17 +21,40 @@ const hasType = (e: DragEvent, type: string) => e.dataTransfer.types.includes(ty
 /** 拖动时的放置提示：放进去 / 插到前面 */
 type DropHint = { key: string; mode: "into" | "before" } | null;
 
-export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
+/** 「新建」菜单的内容，侧边栏和手机端共用 */
+export function useCreateMenu(): MenuItem[] {
+  const ui = useUI();
+  const { data } = useAppData();
+  return [
+    { label: "添加链接", icon: <NavIcon name="link" />, shortcut: "N", onSelect: () => ui.addLink() },
+    { label: "批量导入", icon: <NavIcon name="import" />, onSelect: () => ui.importLinks() },
+    { divider: true },
+    {
+      label: "新建项目",
+      icon: <NavIcon name="folderPlus" />,
+      // 还没有分组时先建分组
+      onSelect: () => (data?.groups.length ? ui.editProject() : ui.editGroup()),
+    },
+    { label: "新建分组", icon: <NavIcon name="group" />, onSelect: () => ui.editGroup() },
+  ];
+}
+
+/**
+ * 导航树：桌面端显示在左侧边栏；手机端作为「项目」页（variant="page"），
+ * 不显示标志、新建按钮，以及底部标签栏里已有的入口。
+ */
+export function Sidebar({ variant = "sidebar" }: { variant?: "sidebar" | "page" }) {
   const { data } = useAppData();
   const pathname = usePathname();
   const router = useRouter();
   const ui = useUI();
   const actions = useLinkActions();
+  const createMenu = useCreateMenu();
   const [collapsed, setCollapsed] = useState<Record<number, boolean>>({});
   const [showArchived, setShowArchived] = useState(false);
   const [tagsOpen, setTagsOpen] = useState(true);
   const [drop, setDrop] = useState<DropHint>(null);
-  const mod = useModKey();
+  const page = variant === "page";
 
   useEffect(() => {
     setCollapsed(readLocal("mydoc.collapsed", {}));
@@ -58,7 +64,6 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
   const counts = useMemo(() => {
     const byProject = new Map<number, number>();
-    const byTag = new Map<string, number>();
     let inbox = 0;
     let favorites = 0;
     let expiring = 0;
@@ -67,9 +72,8 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       else byProject.set(l.projectId, (byProject.get(l.projectId) ?? 0) + 1);
       if (l.favorite) favorites++;
       if (isExpiring(l)) expiring++;
-      for (const t of l.tags) byTag.set(t.toLowerCase(), (byTag.get(t.toLowerCase()) ?? 0) + 1);
     }
-    return { byProject, byTag, inbox, favorites, expiring, all: data?.links.length ?? 0 };
+    return { byProject, inbox, favorites, expiring, all: data?.links.length ?? 0 };
   }, [data]);
 
   const toggleGroup = (id: number) => {
@@ -120,9 +124,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     const n = projectsOf(g.id).length;
     const ok = await ui.confirm({
       title: `删除分组「${g.name}」？`,
-      message: n
-        ? `其中的 ${n} 个项目也会被删除，项目里的链接会移到收件箱，不会丢失。`
-        : "这个分组是空的。",
+      message: n ? `其中的 ${n} 个项目也会被删除，项目里的链接会移到收件箱，不会丢失。` : "这个分组是空的。",
       confirmText: "删除",
       danger: true,
     });
@@ -145,45 +147,52 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const setArchived = (p: Project, archived: boolean) =>
     run(async () => {
       await api(`/api/projects/${p.id}`, { method: "PATCH", body: { archived } });
-      ui.toast(archived ? `已归档「${p.name}」，勾选侧边栏的「显示已归档」可以看到` : `已恢复「${p.name}」`);
+      ui.toast(archived ? `已归档「${p.name}」，勾选「显示已归档的项目」可以看到` : `已恢复「${p.name}」`);
     });
 
   const archivedCount = data?.projects.filter((p) => p.archived).length ?? 0;
+  const rowH = page ? "h-11" : "h-9";
 
   return (
-    <nav
-      className="flex h-full flex-col bg-surface"
-      onClick={(e) => {
-        if ((e.target as HTMLElement).closest("a")) onNavigate?.();
-      }}
-    >
-      <div className="space-y-2 p-3">
-        <div className="flex items-center gap-2 px-1 py-1">
-          <span className="flex size-7 items-center justify-center rounded-lg bg-accent text-[13px] font-bold text-accent-fg">
-            M
-          </span>
-          <span className="text-[15px] font-semibold">MyDoc</span>
+    <nav aria-label="主导航" className={cx("flex flex-col", page ? "px-2 pt-2 pb-4" : "h-full bg-side")}>
+      {!page && (
+        <div className="px-3 pt-4">
+          <div className="flex items-center gap-2.5 px-2 pt-1 pb-3.5">
+            <Logo />
+            <span className="text-base font-semibold">MyDoc</span>
+          </div>
+          <div className="mx-1 mb-3.5">
+            <Menu
+              label="新建"
+              align="start"
+              matchWidth
+              items={createMenu}
+              trigger={(props) => (
+                <button
+                  type="button"
+                  {...props}
+                  className="flex h-9 w-full cursor-pointer items-center justify-center gap-1.5 rounded-md bg-accent font-medium text-white transition-colors hover:bg-accent-hover"
+                >
+                  <Plus size={16} strokeWidth={2.2} />
+                  新建
+                  <ChevronDown size={14} strokeWidth={2.2} />
+                </button>
+              )}
+            />
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={ui.openPalette}
-          className="flex h-9 w-full items-center gap-2 rounded-lg border border-line bg-bg px-3 text-muted hover:border-accent/50"
-        >
-          <Search size={15} />
-          <span className="flex-1 text-left">搜索…</span>
-          <Kbd>{mod} K</Kbd>
-        </button>
-      </div>
+      )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-        <ul className="space-y-0.5">
-          <NavItem href="/" icon={<House size={16} />} label="首页" active={pathname === "/"} />
+      <div className={cx("flex flex-col gap-0.5", !page && "min-h-0 flex-1 overflow-y-auto px-3 pb-3")}>
+        <ul className="flex flex-col gap-0.5">
+          {!page && <NavItem href="/" icon="home" label="工作台" active={pathname === "/"} />}
           <NavItem
             href="/inbox"
-            icon={<Inbox size={16} />}
+            icon="inbox"
             label="收件箱"
             count={counts.inbox}
             active={pathname === "/inbox"}
+            className={rowH}
             dropActive={drop?.key === "inbox"}
             onDragOver={(e) => {
               if (!hasType(e, LINKS_MIME)) return;
@@ -198,51 +207,84 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
               if (ids.length) void actions.move(ids, null, "收件箱");
             }}
           />
-          <NavItem href="/recent" icon={<Clock size={16} />} label="最近访问" active={pathname === "/recent"} />
-          <NavItem
-            href="/favorites"
-            icon={<Star size={16} />}
-            label="收藏"
-            count={counts.favorites}
-            active={pathname === "/favorites"}
-          />
-          {counts.expiring > 0 && (
+          {!page && (
             <NavItem
-              href="/expiring"
-              icon={<AlarmClock size={16} />}
-              label="即将过期"
-              count={counts.expiring}
-              warn
-              active={pathname === "/expiring"}
+              href="/favorites"
+              icon="star"
+              label="我的收藏"
+              count={counts.favorites}
+              active={pathname === "/favorites"}
             />
           )}
-          <NavItem href="/all" icon={<Layers size={16} />} label="全部链接" count={counts.all} active={pathname === "/all"} />
+          <NavItem
+            href="/expiring"
+            icon="alarm"
+            label="即将过期"
+            count={counts.expiring}
+            warn
+            active={pathname === "/expiring"}
+            className={rowH}
+          />
+          <NavItem
+            href="/all"
+            icon="layers"
+            label="全部链接"
+            count={counts.all}
+            active={pathname === "/all"}
+            className={rowH}
+          />
+          {page && (
+            <NavItem href="/recent" icon="clock" label="最近访问" active={pathname === "/recent"} className={rowH} />
+          )}
         </ul>
 
         <SectionTitle
           action={
-            <IconButton label="新建分组" className="size-6" onClick={() => ui.editGroup()}>
-              <FolderPlus size={15} />
-            </IconButton>
+            <Menu
+              label="新建项目或分组"
+              items={[
+                {
+                  label: "新建项目",
+                  icon: <NavIcon name="folderPlus" />,
+                  onSelect: () => (data?.groups.length ? ui.editProject() : ui.editGroup()),
+                },
+                { label: "新建分组", icon: <NavIcon name="group" />, onSelect: () => ui.editGroup() },
+              ]}
+              trigger={(props) => (
+                <IconButton
+                  label="新建项目或分组"
+                  size="sm"
+                  className={page ? "size-9" : "size-[22px] rounded"}
+                  {...props}
+                >
+                  <Plus size={page ? 18 : 14} />
+                </IconButton>
+              )}
+            />
           }
         >
           项目
         </SectionTitle>
 
         {!data ? (
-          <div className="flex justify-center py-4 text-muted">
-            <Spinner />
+          <div className="flex flex-col gap-3 px-2.5 py-2">
+            {[72, 64, 88].map((w) => (
+              <div key={w} className="flex items-center gap-2 pl-4">
+                <Skeleton className="size-[18px] rounded" />
+                <Skeleton style={{ width: w }} />
+              </div>
+            ))}
           </div>
         ) : data.groups.length === 0 ? (
           <button
             type="button"
             onClick={() => ui.editGroup()}
-            className="w-full rounded-lg border border-dashed border-line px-3 py-3 text-left text-[13px] text-muted hover:border-accent/50 hover:text-fg"
+            className="mx-1 rounded-md border border-dashed border-line-strong px-3 py-3 text-left text-[13px] text-muted hover:border-accent/60 hover:text-fg"
           >
             还没有分组，点这里新建一个（例如「工作」「个人」）
           </button>
         ) : (
-          <div className="space-y-1">
+          <div className="flex flex-col gap-0.5">
             {data.groups.map((g) => {
               const projects = projectsOf(g.id).filter((p) => showArchived || !p.archived);
               const open = !collapsed[g.id];
@@ -250,7 +292,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
               return (
                 <div key={g.id}>
                   <div
-                    draggable
+                    draggable={!page}
                     onDragStart={(e) => {
                       e.dataTransfer.setData(GROUP_MIME, String(g.id));
                       e.dataTransfer.effectAllowed = "move";
@@ -271,7 +313,8 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                       else if (projectId) reorderProjects(g.id, projectId, null);
                     }}
                     className={cx(
-                      "group/row flex h-8 items-center rounded-md",
+                      "group/row flex items-center rounded-md",
+                      page ? "h-10" : "h-[30px]",
                       drop?.key === key && drop.mode === "before" && "shadow-[inset_0_2px_0_var(--accent)]",
                       drop?.key === key && drop.mode === "into" && "bg-accent-soft",
                     )}
@@ -280,38 +323,62 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                       type="button"
                       onClick={() => toggleGroup(g.id)}
                       aria-expanded={open}
-                      className="flex h-full min-w-0 flex-1 items-center gap-1 px-1.5 text-left text-[13px] font-medium text-muted hover:text-fg"
+                      className="flex h-full min-w-0 flex-1 cursor-pointer items-center gap-1 px-2 text-left text-[13px] text-muted hover:text-fg"
                     >
-                      <ChevronRight size={14} className={cx("shrink-0 transition-transform", open && "rotate-90")} />
+                      <ChevronRight
+                        size={14}
+                        className={cx("shrink-0 text-icon transition-transform", open && "rotate-90")}
+                      />
                       <span className="truncate">{g.name}</span>
                     </button>
-                    <span className="flex opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
-                      <IconButton label="新建项目" className="size-7" onClick={() => ui.editProject(undefined, g.id)}>
-                        <Plus size={15} />
+                    <span
+                      className={cx(
+                        "flex pr-0.5 focus-within:opacity-100 pointer-coarse:opacity-100",
+                        !page && "opacity-0 group-hover/row:opacity-100",
+                      )}
+                    >
+                      <IconButton
+                        label="新建项目"
+                        size="sm"
+                        className="size-[26px]"
+                        onClick={() => ui.editProject(undefined, g.id)}
+                      >
+                        <Plus size={14} />
                       </IconButton>
                       <Menu
-                        className="size-7"
+                        className="size-[26px]"
                         label="分组操作"
                         items={[
-                          { label: "新建项目", icon: <Plus size={14} />, onSelect: () => ui.editProject(undefined, g.id) },
-                          { label: "重命名", icon: <Pencil size={14} />, onSelect: () => ui.editGroup(g) },
+                          {
+                            label: "新建项目",
+                            icon: <Plus size={15} />,
+                            onSelect: () => ui.editProject(undefined, g.id),
+                          },
+                          { label: "重命名", icon: <Pencil size={15} />, onSelect: () => ui.editGroup(g) },
                           { divider: true },
-                          { label: "删除分组", icon: <Trash2 size={14} />, danger: true, onSelect: () => void deleteGroup(g) },
+                          {
+                            label: "删除分组",
+                            icon: <Trash2 size={15} />,
+                            danger: true,
+                            onSelect: () => void deleteGroup(g),
+                          },
                         ]}
                       />
                     </span>
                   </div>
 
                   {open && (
-                    <ul className="space-y-0.5">
+                    <ul className="flex flex-col gap-0.5">
                       {projects.map((p) => {
                         const pkey = `p${p.id}`;
                         const active = pathname === `/p/${p.id}`;
+                        const count = counts.byProject.get(p.id) ?? 0;
                         return (
                           <li key={p.id} className="group/proj relative">
                             <NextLink
                               href={`/p/${p.id}`}
-                              draggable
+                              draggable={!page}
+                              aria-current={active ? "page" : undefined}
                               onDragStart={(e) => {
                                 e.dataTransfer.setData(PROJECT_MIME, String(p.id));
                                 e.dataTransfer.effectAllowed = "move";
@@ -332,46 +399,66 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                                 else if (dragged && dragged !== p.id) reorderProjects(g.id, dragged, p.id);
                               }}
                               className={cx(
-                                "flex h-8 items-center gap-2 rounded-md pr-2 pl-6 text-[13px] pointer-coarse:pr-9",
-                                active ? "bg-accent-soft font-medium text-accent" : "hover:bg-surface-2",
-                                p.archived && "text-muted",
+                                "flex items-center gap-2 rounded-md pr-2.5 pl-[26px]",
+                                !page && "pointer-coarse:pr-10",
+                                page ? "h-11" : "h-[34px]",
+                                active ? "bg-accent-soft font-medium text-accent-text" : "hover:bg-nav-hover",
+                                p.archived && "text-faint",
                                 drop?.key === pkey && drop.mode === "into" && "bg-accent-soft ring-1 ring-accent",
                                 drop?.key === pkey && drop.mode === "before" && "shadow-[inset_0_2px_0_var(--accent)]",
                               )}
                             >
                               {p.archived ? (
-                                <Archive size={14} className="shrink-0 opacity-70" />
+                                <span className="flex size-[18px] shrink-0 items-center justify-center rounded bg-chip text-faint">
+                                  <Archive size={12} />
+                                </span>
                               ) : (
-                                <span className="size-1.5 shrink-0 rounded-full bg-current opacity-40" />
+                                <ProjectBadge project={p} size={18} />
                               )}
                               <span className="min-w-0 flex-1 truncate">{p.name}</span>
-                              <span className="text-xs text-muted tabular-nums group-hover/proj:invisible">
-                                {counts.byProject.get(p.id) || ""}
+                              <span
+                                className={cx(
+                                  "text-xs font-normal text-faint tabular-nums",
+                                  !page && "group-hover/proj:invisible pointer-coarse:invisible",
+                                )}
+                              >
+                                {count || ""}
                               </span>
                             </NextLink>
-                            <span className="absolute top-1/2 right-0.5 -translate-y-1/2 opacity-0 group-hover/proj:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
-                              <Menu
-                                className="size-7"
-                                label="项目操作"
-                                items={[
-                                  { label: "编辑项目", icon: <Pencil size={14} />, onSelect: () => ui.editProject(p) },
-                                  p.archived
-                                    ? {
-                                        label: "取消归档",
-                                        icon: <ArchiveRestore size={14} />,
-                                        onSelect: () => void setArchived(p, false),
-                                      }
-                                    : { label: "归档", icon: <Archive size={14} />, onSelect: () => void setArchived(p, true) },
-                                  { divider: true },
-                                  {
-                                    label: "删除项目",
-                                    icon: <Trash2 size={14} />,
-                                    danger: true,
-                                    onSelect: () => void deleteProject(p),
-                                  },
-                                ]}
-                              />
-                            </span>
+                            {/* 手机端「项目」页不放更多按钮，进入项目后在页头操作 */}
+                            {!page && (
+                              <span className="absolute top-1/2 right-1 -translate-y-1/2 opacity-0 group-hover/proj:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
+                                <Menu
+                                  className="size-[26px]"
+                                  label="项目操作"
+                                  items={[
+                                    {
+                                      label: "编辑项目",
+                                      icon: <Pencil size={15} />,
+                                      onSelect: () => ui.editProject(p),
+                                    },
+                                    p.archived
+                                      ? {
+                                          label: "取消归档",
+                                          icon: <ArchiveRestore size={15} />,
+                                          onSelect: () => void setArchived(p, false),
+                                        }
+                                      : {
+                                          label: "归档",
+                                          icon: <Archive size={15} />,
+                                          onSelect: () => void setArchived(p, true),
+                                        },
+                                    { divider: true },
+                                    {
+                                      label: "删除项目",
+                                      icon: <Trash2 size={15} />,
+                                      danger: true,
+                                      onSelect: () => void deleteProject(p),
+                                    },
+                                  ]}
+                                />
+                              </span>
+                            )}
                           </li>
                         );
                       })}
@@ -380,7 +467,10 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                           <button
                             type="button"
                             onClick={() => ui.editProject(undefined, g.id)}
-                            className="flex h-8 w-full items-center gap-2 rounded-md pl-6 text-[13px] text-muted hover:bg-surface-2 hover:text-fg"
+                            className={cx(
+                              "flex w-full cursor-pointer items-center gap-2 rounded-md pl-[26px] text-[13px] text-faint hover:bg-nav-hover hover:text-fg",
+                              page ? "h-11" : "h-[34px]",
+                            )}
                           >
                             <Plus size={14} /> 新建项目
                           </button>
@@ -392,7 +482,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
               );
             })}
             {archivedCount > 0 && (
-              <label className="flex cursor-pointer items-center gap-2 px-1.5 pt-1 text-xs text-muted">
+              <label className="flex cursor-pointer items-center gap-2 px-2.5 pt-1.5 text-xs text-faint">
                 <input
                   type="checkbox"
                   checked={showArchived}
@@ -400,7 +490,6 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                     setShowArchived(e.target.checked);
                     writeLocal("mydoc.showArchived", e.target.checked);
                   }}
-                  className="accent-[var(--accent)]"
                 />
                 显示已归档的项目（{archivedCount}）
               </label>
@@ -420,43 +509,41 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
               标签
             </SectionTitle>
             {tagsOpen && (
-              <ul className="space-y-0.5">
+              <div className="flex flex-wrap gap-1.5 px-2.5">
                 {data.tags.map((t) => {
-                  const href = `/t/${encodeURIComponent(t.name)}`;
+                  const active = safeDecode(pathname) === `/t/${t.name}`;
                   return (
-                    <NavItem
+                    <NextLink
                       key={t.id}
-                      href={href}
-                      icon={<Hash size={14} />}
-                      label={t.name}
-                      count={counts.byTag.get(t.name.toLowerCase()) ?? 0}
-                      active={safeDecode(pathname) === `/t/${t.name}`}
-                    />
+                      href={`/t/${encodeURIComponent(t.name)}`}
+                      aria-current={active ? "page" : undefined}
+                      className={cx(
+                        "max-w-full truncate rounded px-2 text-xs",
+                        page ? "leading-8" : "leading-[22px]",
+                        active ? "bg-accent-soft text-accent-text" : "bg-chip text-muted hover:text-fg",
+                      )}
+                    >
+                      # {t.name}
+                    </NextLink>
                   );
                 })}
-              </ul>
+              </div>
             )}
           </>
         )}
+
+        {page && (
+          <ul className="mt-4 flex flex-col gap-0.5">
+            <NavItem href="/trash" icon="trash" label="回收站" active={pathname === "/trash"} className={rowH} />
+          </ul>
+        )}
       </div>
 
-      <ul className="space-y-0.5 border-t border-line p-3">
-        <NavItem href="/trash" icon={<Trash2 size={16} />} label="回收站" active={pathname === "/trash"} />
-        <NavItem href="/settings" icon={<Settings size={16} />} label="导入导出与设置" active={pathname === "/settings"} />
-        <li>
-          <button
-            type="button"
-            onClick={async () => {
-              await fetch("/api/auth/logout", { method: "POST" });
-              window.location.href = "/login";
-            }}
-            className="flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-[13px] text-muted hover:bg-surface-2 hover:text-fg"
-          >
-            <LogOut size={16} />
-            退出登录
-          </button>
-        </li>
-      </ul>
+      {!page && (
+        <ul className="px-3 pt-2 pb-4">
+          <NavItem href="/trash" icon="trash" label="回收站" active={pathname === "/trash"} muted />
+        </ul>
+      )}
     </nav>
   );
 }
@@ -473,19 +560,19 @@ function SectionTitle({
   open?: boolean;
 }) {
   return (
-    <div className="mt-5 mb-1 flex h-7 items-center justify-between px-1.5">
+    <div className="flex items-center justify-between px-2.5 pt-[18px] pb-1.5 text-xs text-faint">
       {onClick ? (
         <button
           type="button"
           onClick={onClick}
           aria-expanded={open}
-          className="flex items-center gap-1 text-xs font-semibold tracking-wide text-muted hover:text-fg"
+          className="flex cursor-pointer items-center gap-1 hover:text-fg"
         >
           {children}
           <ChevronRight size={12} className={cx("transition-transform", open && "rotate-90")} />
         </button>
       ) : (
-        <span className="text-xs font-semibold tracking-wide text-muted">{children}</span>
+        <span>{children}</span>
       )}
       {action}
     </div>
@@ -499,17 +586,21 @@ function NavItem({
   count,
   active,
   warn,
+  muted,
+  className,
   dropActive,
   onDragOver,
   onDragLeave,
   onDrop,
 }: {
   href: string;
-  icon: ReactNode;
+  icon: Parameters<typeof NavIcon>[0]["name"];
   label: string;
   count?: number;
   active?: boolean;
   warn?: boolean;
+  muted?: boolean;
+  className?: string;
   dropActive?: boolean;
   onDragOver?: (e: DragEvent) => void;
   onDragLeave?: (e: DragEvent) => void;
@@ -519,19 +610,29 @@ function NavItem({
     <li>
       <NextLink
         href={href}
+        aria-current={active ? "page" : undefined}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
         onDrop={onDrop}
         className={cx(
-          "flex h-8 items-center gap-2.5 rounded-md px-2 text-[13px]",
-          active ? "bg-accent-soft font-medium text-accent" : "hover:bg-surface-2",
+          "flex h-9 items-center gap-2.5 rounded-md px-2.5",
+          active
+            ? "bg-accent-soft font-medium text-accent-text"
+            : muted
+              ? "text-muted hover:bg-nav-hover"
+              : "hover:bg-nav-hover",
           dropActive && "bg-accent-soft ring-1 ring-accent",
+          className,
         )}
       >
-        <span className={cx("shrink-0", !active && "text-muted", warn && "text-warn")}>{icon}</span>
+        <span className={cx("shrink-0", active ? "text-accent-text" : warn ? "text-warn" : "text-muted")}>
+          <NavIcon name={icon} />
+        </span>
         <span className="min-w-0 flex-1 truncate">{label}</span>
         {!!count && (
-          <span className={cx("text-xs tabular-nums", warn ? "font-medium text-warn" : "text-muted")}>{count}</span>
+          <span className={cx("text-xs tabular-nums", warn ? "font-medium text-warn-text" : "font-normal text-faint")}>
+            {count}
+          </span>
         )}
       </NextLink>
     </li>

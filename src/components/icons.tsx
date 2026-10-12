@@ -48,7 +48,9 @@ const GLYPHS: Record<DocKind, { body: ReactNode; width?: number; scale?: number 
       </>
     ),
   },
-  wiki: { body: <path d="M5 18.5V5.5A1.5 1.5 0 0 1 6.5 4H19v13H6.5A1.5 1.5 0 0 0 5 18.5zm0 0A1.5 1.5 0 0 0 6.5 20H19" /> },
+  wiki: {
+    body: <path d="M5 18.5V5.5A1.5 1.5 0 0 1 6.5 4H19v13H6.5A1.5 1.5 0 0 0 5 18.5zm0 0A1.5 1.5 0 0 0 6.5 20H19" />,
+  },
   folder: { body: <path d="M3.5 7.5a2 2 0 0 1 2-2h3.8l2 2h7.2a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" /> },
   file: {
     body: (
@@ -167,7 +169,10 @@ export function Logo({ size = 28 }: { size?: number }) {
     <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden>
       <rect width="32" height="32" rx="8" fill="var(--accent)" />
       <rect x="11" y="7" width="13" height="16" rx="2.5" fill="#FFFFFF" opacity="0.45" />
-      <path d="M8 11.5A2.5 2.5 0 0 1 10.5 9h7.2l3.3 3.3v9.2a2.5 2.5 0 0 1-2.5 2.5h-8A2.5 2.5 0 0 1 8 21.5z" fill="#FFFFFF" />
+      <path
+        d="M8 11.5A2.5 2.5 0 0 1 10.5 9h7.2l3.3 3.3v9.2a2.5 2.5 0 0 1-2.5 2.5h-8A2.5 2.5 0 0 1 8 21.5z"
+        fill="#FFFFFF"
+      />
       <path d="M11 16.5h7M11 19.5h4.5" stroke="var(--accent)" strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   );
@@ -177,7 +182,10 @@ export function Avatar({ size = 32, className }: { size?: number; className?: st
   return (
     <span
       aria-hidden
-      className={cx("inline-flex shrink-0 items-center justify-center rounded-full bg-accent font-semibold text-white", className)}
+      className={cx(
+        "inline-flex shrink-0 items-center justify-center rounded-full bg-accent font-semibold text-white",
+        className,
+      )}
       style={{ width: size, height: size, fontSize: Math.round(size * 0.41) }}
     >
       我
@@ -191,20 +199,54 @@ export type IllustrationKind = "links" | "search" | "trash" | "done";
 export function Illustration({ kind = "links" }: { kind?: IllustrationKind }) {
   const badge =
     kind === "search" ? (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.6" strokeLinecap="round">
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="#FFFFFF"
+        strokeWidth="2.6"
+        strokeLinecap="round"
+      >
         <circle cx="11" cy="11" r="6" />
         <path d="m20 20-4-4" />
       </svg>
     ) : kind === "trash" ? (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="#FFFFFF"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <path d="M5 7h14M10 11v6M14 11v6M7 7l1 13h8l1-13M9.5 7V4.5h5V7" />
       </svg>
     ) : kind === "done" ? (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="#FFFFFF"
+        strokeWidth="2.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <path d="M5 12.5l4.5 4.5L19 7.5" />
       </svg>
     ) : (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.6" strokeLinecap="round">
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="#FFFFFF"
+        strokeWidth="2.6"
+        strokeLinecap="round"
+      >
         <path d="M12 5v14M5 12h14" />
       </svg>
     );
