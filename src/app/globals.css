@@ -1,57 +1,137 @@
 @import "tailwindcss";
 
+/* 设计规范 v3：参考飞书的视觉气质，主色亮蓝 #3370FF */
 :root {
-  --bg: #f5f6f8;
+  --bg: #ffffff;
+  --side: #f7f8fa;
   --surface: #ffffff;
-  --surface-2: #eff1f4;
-  --line: #e2e5ea;
-  --fg: #15171c;
-  --muted: #687082;
-  --accent: #2563eb;
-  --accent-soft: #e7eeff;
-  --accent-fg: #ffffff;
-  --danger: #dc2626;
-  --danger-soft: #fdecec;
-  --warn: #b45309;
-  --warn-soft: #fff3dc;
+  --menu: #ffffff;
+  --line: #e8e9eb;
+  --line-soft: #f0f1f2;
+  --line-strong: #dee0e3;
+  --control: #d0d3d6;
+  --fg: #1f2329;
+  --muted: #646a73;
+  --faint: #6e7480;
+  --icon: #8f959e;
+  --disabled: #c9cdd4;
+  --field: #f2f3f5;
+  --chip: #ebecee;
+  --hover: #f5f6f7;
+  --nav-hover: #ebecee;
+  --accent: #3370ff;
+  --accent-hover: #245bdb;
+  --accent-soft: rgb(51 112 255 / 0.1);
+  --accent-text: #3370ff;
+  --pin: #e1eaff;
+  --pin-text: #245bdb;
+  --warn: #ff8800;
+  --warn-soft: #fff3e8;
+  --warn-text: #c25700;
+  --danger: #d83931;
+  --danger-hover: #c42b24;
+  --danger-soft: #feecec;
+  --danger-text: #c42b24;
+  --success: #20a35a;
+  --star: #ffb400;
+  --kbd: #ffffff;
+  --kbd-line: #dee0e3;
+  --shadow: rgb(31 35 41 / 0.12);
+  --skeleton: #eff0f1;
+  --skeleton-hi: #f7f8f9;
+  --backdrop: rgb(31 35 41 / 0.45);
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0e1015;
-    --surface: #161920;
-    --surface-2: #1f232c;
-    --line: #2a2f3a;
-    --fg: #e6e8ee;
-    --muted: #949bab;
-    --accent: #5b8cff;
-    --accent-soft: #1b2640;
-    --accent-fg: #ffffff;
-    --danger: #f87171;
-    --danger-soft: #3a1c1f;
-    --warn: #f5b638;
-    --warn-soft: #3a2d12;
+    --bg: #18191b;
+    --side: #1e1f22;
+    --surface: #1e1f22;
+    --menu: #242528;
+    --line: #2d2e32;
+    --line-soft: #26272a;
+    --line-strong: #36383d;
+    --control: #3b3d42;
+    --fg: #ebecee;
+    --muted: #b3b6bc;
+    --faint: #9da1a9;
+    --icon: #868b94;
+    --disabled: #4a4c52;
+    --field: #26272a;
+    --chip: #2d2e32;
+    --hover: #222326;
+    --nav-hover: #2a2b2f;
+    --accent: #3370ff;
+    --accent-hover: #4e83fd;
+    --accent-soft: rgb(51 112 255 / 0.2);
+    --accent-text: #7aa2ff;
+    --pin: rgb(51 112 255 / 0.2);
+    --pin-text: #7aa2ff;
+    --warn: #ff8800;
+    --warn-soft: #3a2611;
+    --warn-text: #ffa24d;
+    --danger: #d83931;
+    --danger-hover: #e5524a;
+    --danger-soft: #3d1a19;
+    --danger-text: #ff7b73;
+    --success: #34b86e;
+    --star: #ffb400;
+    --kbd: #26272a;
+    --kbd-line: #3b3d42;
+    --shadow: rgb(0 0 0 / 0.45);
+    --skeleton: #26272a;
+    --skeleton-hi: #2d2e32;
+    --backdrop: rgb(0 0 0 / 0.6);
     color-scheme: dark;
   }
 }
 
 @theme inline {
   --color-bg: var(--bg);
+  --color-side: var(--side);
   --color-surface: var(--surface);
-  --color-surface-2: var(--surface-2);
+  --color-menu: var(--menu);
   --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-line-strong: var(--line-strong);
+  --color-control: var(--control);
   --color-fg: var(--fg);
   --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-icon: var(--icon);
+  --color-disabled: var(--disabled);
+  --color-field: var(--field);
+  --color-chip: var(--chip);
+  --color-hover: var(--hover);
+  --color-nav-hover: var(--nav-hover);
   --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
   --color-accent-soft: var(--accent-soft);
-  --color-accent-fg: var(--accent-fg);
-  --color-danger: var(--danger);
-  --color-danger-soft: var(--danger-soft);
+  --color-accent-text: var(--accent-text);
+  --color-accent-fg: #ffffff;
+  --color-pin: var(--pin);
+  --color-pin-text: var(--pin-text);
   --color-warn: var(--warn);
   --color-warn-soft: var(--warn-soft);
+  --color-warn-text: var(--warn-text);
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-text: var(--danger-text);
+  --color-success: var(--success);
+  --color-star: var(--star);
+  --color-kbd: var(--kbd);
+  --color-kbd-line: var(--kbd-line);
+  /* 旧名字，页面改完后可删除 */
+  --color-surface-2: var(--hover);
+  --shadow-pop: 0 8px 24px var(--shadow);
+  --shadow-card: 0 4px 14px var(--shadow);
+  --shadow-dialog: 0 12px 40px var(--shadow);
   --font-sans:
-    system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+    -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", "Hiragino Sans GB", "Segoe UI",
+    system-ui, sans-serif;
+  --font-mono: "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
 @layer base {
@@ -60,19 +140,71 @@
   ::after {
     border-color: var(--line);
   }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
   body {
     background: var(--bg);
     color: var(--fg);
+    font-size: 14px;
+    line-height: 22px;
     -webkit-font-smoothing: antialiased;
   }
   dialog {
     color: var(--fg);
   }
   dialog::backdrop {
-    background: rgb(0 0 0 / 0.45);
+    background: var(--backdrop);
   }
   :focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
+  }
+  input[type="checkbox"],
+  input[type="radio"] {
+    accent-color: var(--accent);
+  }
+  input[type="search"]::-webkit-search-cancel-button {
+    display: none;
+  }
+}
+
+/* 骨架屏的流光效果 */
+.skeleton {
+  background: linear-gradient(90deg, var(--skeleton) 25%, var(--skeleton-hi) 40%, var(--skeleton) 60%);
+  background-size: 300% 100%;
+  animation: skeleton 1.4s ease-in-out infinite;
+}
+@keyframes skeleton {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: 0 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  dialog[open],
+  [role="status"],
+  [role="alert"] {
+    animation: none !important;
   }
 }

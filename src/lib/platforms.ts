@@ -12,6 +12,8 @@ export interface Platform {
   kinds?: [RegExp, string][];
   /** 页面标题中的平台后缀，获取标题后去掉 */
   suffixes?: string[];
+  /** 识别不出具体文档类型时，按哪一类显示图标（默认「文档」） */
+  group?: "disk" | "design" | "code" | "wiki";
 }
 
 export const PLATFORMS: Platform[] = [
@@ -121,7 +123,7 @@ export const PLATFORMS: Platform[] = [
     hosts: ["onedrive.live.com", "1drv.ms", "sharepoint.com", "office.com", "onedrive.com"],
     suffixes: ["OneDrive", "Microsoft Word", "Microsoft Excel", "Microsoft PowerPoint"],
   },
-  { key: "baidupan", name: "百度网盘", short: "百", color: "#06a7ff", hosts: ["pan.baidu.com"], suffixes: ["百度网盘"] },
+  { key: "baidupan", name: "百度网盘", short: "百", color: "#06a7ff", hosts: ["pan.baidu.com"], suffixes: ["百度网盘"], group: "disk" },
   {
     key: "alipan",
     name: "阿里云盘",
@@ -129,9 +131,10 @@ export const PLATFORMS: Platform[] = [
     color: "#ff6a00",
     hosts: ["alipan.com", "aliyundrive.com"],
     suffixes: ["阿里云盘"],
+    group: "disk",
   },
-  { key: "quark", name: "夸克网盘", short: "夸", color: "#4f6bff", hosts: ["pan.quark.cn"], suffixes: ["夸克网盘"] },
-  { key: "weiyun", name: "腾讯微云", short: "微", color: "#2f7cf6", hosts: ["weiyun.com"], suffixes: ["微云", "腾讯微云"] },
+  { key: "quark", name: "夸克网盘", short: "夸", color: "#4f6bff", hosts: ["pan.quark.cn"], suffixes: ["夸克网盘"], group: "disk" },
+  { key: "weiyun", name: "腾讯微云", short: "微", color: "#2f7cf6", hosts: ["weiyun.com"], suffixes: ["微云", "腾讯微云"], group: "disk" },
   {
     key: "lanzou",
     name: "蓝奏云",
@@ -140,18 +143,19 @@ export const PLATFORMS: Platform[] = [
     hosts: [],
     hostPattern: /(^|\.)lanzou[a-z]?\.com$/,
     suffixes: ["蓝奏云"],
+    group: "disk",
   },
-  { key: "figma", name: "Figma", short: "F", color: "#a259ff", hosts: ["figma.com"], suffixes: ["Figma"] },
-  { key: "mastergo", name: "MasterGo", short: "M", color: "#3c6cf5", hosts: ["mastergo.com"], suffixes: ["MasterGo"] },
-  { key: "lanhu", name: "蓝湖", short: "湖", color: "#2878ff", hosts: ["lanhuapp.com"], suffixes: ["蓝湖"] },
-  { key: "modao", name: "墨刀", short: "墨", color: "#ff5a5a", hosts: ["modao.cc"], suffixes: ["墨刀"] },
-  { key: "processon", name: "ProcessOn", short: "P", color: "#067bef", hosts: ["processon.com"], suffixes: ["ProcessOn"] },
-  { key: "boardmix", name: "boardmix", short: "B", color: "#6b4cff", hosts: ["boardmix.cn", "boardmix.com"], suffixes: ["boardmix"] },
+  { key: "figma", name: "Figma", short: "F", color: "#a259ff", hosts: ["figma.com"], suffixes: ["Figma"], group: "design" },
+  { key: "mastergo", name: "MasterGo", short: "M", color: "#3c6cf5", hosts: ["mastergo.com"], suffixes: ["MasterGo"], group: "design" },
+  { key: "lanhu", name: "蓝湖", short: "湖", color: "#2878ff", hosts: ["lanhuapp.com"], suffixes: ["蓝湖"], group: "design" },
+  { key: "modao", name: "墨刀", short: "墨", color: "#ff5a5a", hosts: ["modao.cc"], suffixes: ["墨刀"], group: "design" },
+  { key: "processon", name: "ProcessOn", short: "P", color: "#067bef", hosts: ["processon.com"], suffixes: ["ProcessOn"], group: "design" },
+  { key: "boardmix", name: "boardmix", short: "B", color: "#6b4cff", hosts: ["boardmix.cn", "boardmix.com"], suffixes: ["boardmix"], group: "design" },
   { key: "wolai", name: "wolai", short: "W", color: "#2b2b2b", hosts: ["wolai.com"], suffixes: ["wolai"] },
   { key: "flowus", name: "FlowUs", short: "F", color: "#2f54eb", hosts: ["flowus.cn"], suffixes: ["FlowUs"] },
-  { key: "github", name: "GitHub", short: "GH", color: "#24292f", hosts: ["github.com"], suffixes: ["GitHub"] },
-  { key: "gitee", name: "Gitee", short: "码", color: "#c71d23", hosts: ["gitee.com"], suffixes: ["Gitee"] },
-  { key: "atlassian", name: "Atlassian", short: "A", color: "#0052cc", hosts: ["atlassian.net"], suffixes: ["Confluence", "Jira"] },
+  { key: "github", name: "GitHub", short: "GH", color: "#24292f", hosts: ["github.com"], suffixes: ["GitHub"], group: "code" },
+  { key: "gitee", name: "Gitee", short: "码", color: "#c71d23", hosts: ["gitee.com"], suffixes: ["Gitee"], group: "code" },
+  { key: "atlassian", name: "Atlassian", short: "A", color: "#0052cc", hosts: ["atlassian.net"], suffixes: ["Confluence", "Jira"], group: "wiki" },
 ];
 
 export const WEB_PLATFORM: Platform = { key: "web", name: "网页", short: "网", color: "#64748b", hosts: [] };
@@ -192,10 +196,77 @@ export function detectKind(url: string, platform = detectPlatform(url)): string 
   return "";
 }
 
+export type DocKind =
+  | "doc"
+  | "sheet"
+  | "base"
+  | "slides"
+  | "form"
+  | "mind"
+  | "flow"
+  | "wiki"
+  | "folder"
+  | "file"
+  | "media"
+  | "disk"
+  | "design"
+  | "code"
+  | "web";
+
+/** 每种文档类型的名称和图标底色（白色图形） */
+export const DOC_KINDS: Record<DocKind, { label: string; color: string }> = {
+  doc: { label: "文档", color: "#3D4F8F" },
+  sheet: { label: "表格", color: "#20A35A" },
+  base: { label: "多维表格", color: "#7B61FF" },
+  slides: { label: "幻灯片", color: "#F5850B" },
+  form: { label: "表单", color: "#7B61FF" },
+  mind: { label: "思维导图", color: "#13A3A3" },
+  flow: { label: "流程图", color: "#13A3A3" },
+  wiki: { label: "知识库", color: "#3D4F8F" },
+  folder: { label: "文件夹", color: "#E89A0C" },
+  file: { label: "文件", color: "#646A73" },
+  media: { label: "音视频", color: "#13A3A3" },
+  disk: { label: "网盘", color: "#0E9DE5" },
+  design: { label: "设计稿", color: "#E8488B" },
+  code: { label: "代码", color: "#3B4048" },
+  web: { label: "网页", color: "#6E7480" },
+};
+
+const KIND_BY_LABEL: Record<string, DocKind> = {
+  文档: "doc",
+  智能文档: "doc",
+  表格: "sheet",
+  智能表格: "sheet",
+  多维表格: "base",
+  幻灯片: "slides",
+  收集表: "form",
+  表单: "form",
+  思维导图: "mind",
+  思维笔记: "mind",
+  流程图: "flow",
+  知识库: "wiki",
+  文件夹: "folder",
+  文件: "file",
+  PDF: "file",
+  妙记: "media",
+};
+
+/** 用于选图标的文档类型：先看链接路径，再按平台类别兜底 */
+export function docKind(url: string, platform = detectPlatform(url)): DocKind {
+  const label = detectKind(url, platform);
+  if (label && KIND_BY_LABEL[label]) return KIND_BY_LABEL[label];
+  if (platform === WEB_PLATFORM) return "web";
+  return platform.group ?? "doc";
+}
+
+/** 来源说明，例如「飞书 · 表格」「百度网盘」「example.com」 */
 export function platformLabel(url: string): string {
   const platform = detectPlatform(url);
-  const kind = detectKind(url, platform);
-  return kind ? `${platform.name} · ${kind}` : platform.name;
+  if (platform === WEB_PLATFORM) return hostOf(url) || platform.name;
+  const label = detectKind(url, platform);
+  if (label) return `${platform.name} · ${label}`;
+  const kind = docKind(url, platform);
+  return kind === "disk" ? platform.name : `${platform.name} · ${DOC_KINDS[kind].label}`;
 }
 
 /** 链接没有标题时的默认名称 */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanFetchedTitle, detectKind, detectPlatform, fallbackTitle, platformLabel } from "./platforms";
+import { cleanFetchedTitle, detectKind, detectPlatform, docKind, fallbackTitle, platformLabel } from "./platforms";
 
 describe("detectPlatform", () => {
   it("识别常见平台", () => {
@@ -55,5 +55,30 @@ describe("fallbackTitle", () => {
   });
   it("普通网页用域名和路径", () => {
     expect(fallbackTitle("https://www.example.com/docs/a")).toBe("example.com/docs/a");
+  });
+});
+
+describe("docKind", () => {
+  it("按路径识别类型，识别不出时按平台类别", () => {
+    expect(docKind("https://a.feishu.cn/sheets/x")).toBe("sheet");
+    expect(docKind("https://a.feishu.cn/base/x")).toBe("base");
+    expect(docKind("https://docs.qq.com/slide/x")).toBe("slides");
+    expect(docKind("https://www.yuque.com/a/b")).toBe("doc");
+    expect(docKind("https://pan.baidu.com/s/1")).toBe("disk");
+    expect(docKind("https://www.figma.com/file/x")).toBe("design");
+    expect(docKind("https://github.com/a/b")).toBe("code");
+    expect(docKind("https://example.com")).toBe("web");
+  });
+});
+
+describe("platformLabel", () => {
+  it("显示平台和类型", () => {
+    expect(platformLabel("https://a.feishu.cn/base/x")).toBe("飞书 · 多维表格");
+    expect(platformLabel("https://www.figma.com/file/x")).toBe("Figma · 设计稿");
+    expect(platformLabel("https://www.notion.so/abc")).toBe("Notion · 文档");
+  });
+  it("网盘只显示平台，普通网页显示域名", () => {
+    expect(platformLabel("https://pan.baidu.com/s/1abc")).toBe("百度网盘");
+    expect(platformLabel("https://www.example.com/a")).toBe("example.com");
   });
 });
