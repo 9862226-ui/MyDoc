@@ -18,6 +18,9 @@
 #   -h, --help          显示帮助
 
 set -euo pipefail
+
+# 整个脚本放在 main 里：bash 会先读完再执行，脚本运行中被 git pull 更新也不会读到一半的新内容
+main() {
 umask 022
 ORIG_ARGS=("$@")
 
@@ -91,7 +94,7 @@ else
   APP_DIR=$DEFAULT_DIR
 fi
 
-echo "${C_BLUE}MyDoc 部署脚本${C_OFF}  目录：$APP_DIR  端口：$PORT  镜像：$([ "$OVERSEAS" = 1 ] && echo 官方源 || echo 国内)"
+echo "${C_BLUE}MyDoc 部署脚本${C_OFF}  目录：$APP_DIR  镜像：$([ "$OVERSEAS" = 1 ] && echo 官方源 || echo 国内)"
 
 # ---------- 1. 系统软件 ----------
 step "检查系统软件"
@@ -169,8 +172,14 @@ if [ ! -f "$APP_DIR/package.json" ]; then
   exec bash "$APP_DIR/deploy.sh" --port "$PORT" --no-pull \
     $([ "$RESET_PASSWORD" = 1 ] && echo --reset-password) $([ "$OVERSEAS" = 1 ] && echo --overseas)
 elif [ "$PULL" = 1 ] && [ -d "$APP_DIR/.git" ]; then
+  OLD_HEAD=$(git_ rev-parse HEAD)
   if git_ pull --ff-only; then
     ok "代码已更新到最新：$(git_ log -1 --format='%h %s')"
+    # 部署脚本本身更新了：用新脚本重新运行
+    if ! git_ diff --quiet "$OLD_HEAD" HEAD -- deploy.sh; then
+      echo "部署脚本有更新，用新版本继续"
+      exec bash "$APP_DIR/deploy.sh" "${ORIG_ARGS[@]}" --no-pull
+    fi
   else
     warn "拉取最新代码失败（网络问题或本地有改动），先用当前代码继续部署"
   fi
@@ -359,3 +368,6 @@ echo "    修改密码   sudo bash $APP_DIR/deploy.sh --reset-password"
 echo "    查看状态   systemctl status $SERVICE"
 echo "    查看日志   journalctl -u $SERVICE -f"
 echo "    重启服务   sudo systemctl restart $SERVICE"
+}
+
+main "$@"
