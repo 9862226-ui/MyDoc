@@ -90,6 +90,7 @@ else
   DEFAULT_DOCKER_MIRRORS="https://docker.m.daocloud.io https://docker.1ms.run"
 fi
 # 可以用环境变量指定 Docker 镜像加速地址（例如阿里云容器镜像服务里的专属地址），多个用空格分开
+USER_MIRRORS=${DOCKER_MIRRORS:-}
 DOCKER_MIRRORS=${DOCKER_MIRRORS:-$DEFAULT_DOCKER_MIRRORS}
 
 # ---------- 前置检查 ----------
@@ -512,30 +513,44 @@ install_docker() {
   ok "已安装 $(docker --version)"
 }
 
-# 给 Docker 配置镜像加速（只在拉取官方镜像失败时才配置）
+# 给 Docker 配置镜像加速。参数为 1 时替换已有的配置（用户用 DOCKER_MIRRORS 指定了地址）
 configure_docker_mirrors() {
+  local force=${1:-0} json=/etc/docker/daemon.json list="" m
   [ -n "$DOCKER_MIRRORS" ] || return 1
-  local json=/etc/docker/daemon.json list="" m
   for m in $DOCKER_MIRRORS; do list="$list${list:+, }\"$m\""; done
   mkdir -p /etc/docker
-  if [ -s "$json" ] && grep -q registry-mirrors "$json"; then
-    warn "$json 里已经配置了镜像加速，不做修改"
-    return 1
+  if [ -s "$json" ] && grep -q '"registry-mirrors"' "$json"; then
+    if [ "$force" != 1 ]; then
+      warn "$json 里已经配置了镜像加速，不做修改"
+      return 1
+    fi
+    cp "$json" "$json.bak"
+    sed -i "s#\"registry-mirrors\": *\[[^]]*\]#\"registry-mirrors\": [$list]#" "$json"
+    if ! grep -qF "[$list]" "$json"; then
+      warn "没能自动修改 $json，请手动把里面的 registry-mirrors 改成：$DOCKER_MIRRORS"
+      return 1
+    fi
   elif [ -s "$json" ] && [ "$(tr -d ' \n\t' <"$json")" != "{}" ]; then
     cp "$json" "$json.bak"
-    sed -i "0,/{/s//{\n  \"registry-mirrors\": [$list],/" "$json"
+    sed -i "0,/{/s#{#{\n  \"registry-mirrors\": [$list],#" "$json"
+    if ! grep -q '"registry-mirrors"' "$json"; then
+      warn "没能自动修改 $json，请手动加上 registry-mirrors：$DOCKER_MIRRORS"
+      return 1
+    fi
   else
     printf '{\n  "registry-mirrors": [%s]\n}\n' "$list" >"$json"
   fi
   ok "已配置 Docker 镜像加速：$DOCKER_MIRRORS"
-  [ "$HAS_SYSTEMD" = 1 ] && systemctl restart docker
+  if [ "$HAS_SYSTEMD" = 1 ]; then systemctl restart docker; fi
   return 0
 }
 
+BASE_IMAGES="node:22-bookworm node:22-bookworm-slim"
+have_base_images() { docker image inspect $BASE_IMAGES >/dev/null 2>&1; }
 pull_base_images() {
   local img
-  for img in node:22-bookworm node:22-bookworm-slim; do
-    timeout 600 docker pull -q "$img" >/dev/null 2>&1 || return 1
+  for img in $BASE_IMAGES; do
+    timeout 900 docker pull -q "$img" >/dev/null 2>&1 || return 1
   done
 }
 
@@ -556,15 +571,20 @@ deploy_docker() {
   fi
 
   step "准备基础镜像（node:22，约 400MB）"
-  if ! pull_base_images; then
-    if configure_docker_mirrors && pull_base_images; then
-      :
+  [ -n "$USER_MIRRORS" ] && { configure_docker_mirrors 1 || true; }
+  if have_base_images; then
+    ok "基础镜像已在本机"
+  else
+    echo "下载中，第一次需要几分钟…"
+    # 先直接下载（失败重试一次），还不行再配置国内镜像加速
+    if pull_base_images || pull_base_images ||
+      { [ -z "$USER_MIRRORS" ] && configure_docker_mirrors && pull_base_images; }; then
+      ok "基础镜像已就绪"
     else
       die "下载 Docker 镜像失败。可以在阿里云「容器镜像服务 → 镜像工具 → 镜像加速器」里复制专属加速地址，然后运行：
-  sudo DOCKER_MIRRORS=你的加速地址 bash $APP_DIR/deploy.sh --reset-password"
+  sudo DOCKER_MIRRORS=你的加速地址 bash $APP_DIR/deploy.sh"
     fi
   fi
-  ok "基础镜像已就绪"
 
   # docker-compose.yml 从同目录的 .env 读取密码、端口和 npm 源
   (
