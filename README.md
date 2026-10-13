@@ -36,9 +36,40 @@
 - 导出 JSON（可恢复）、CSV（Excel 打开）、浏览器书签 HTML
 - 所有数据在一个 SQLite 文件里：`data/mydoc.db`
 
-## 部署（Docker，推荐）
+## 一键部署（Ubuntu / Debian，国内服务器推荐）
 
-服务器上需要安装 Docker 和 Docker Compose。
+登录服务器后运行：
+
+```bash
+sudo apt-get install -y git
+sudo git clone https://github.com/9862226-ui/MyDoc.git /opt/mydoc
+sudo bash /opt/mydoc/deploy.sh
+```
+
+按提示设置登录密码，完成后访问 `http://服务器IP:3000`。云服务器还要在控制台的「安全组」里放行 TCP 3000 端口。
+
+脚本会自动完成：
+
+- 从国内镜像安装 Node.js 22 和依赖（不需要 Docker，也不用访问 Docker Hub）
+- 构建并注册成系统服务 `mydoc`，开机自启、出错自动重启
+- 内存小于 2G 时自动添加交换空间，避免构建时内存不够
+- 本机开了 ufw 防火墙时自动放行端口
+
+数据在 `/opt/mydoc/data`，密码和端口在 `/etc/mydoc/mydoc.env`。
+
+| 操作 | 命令 |
+|---|---|
+| 更新到最新版本 | `sudo bash /opt/mydoc/deploy.sh` |
+| 修改登录密码 | `sudo bash /opt/mydoc/deploy.sh --reset-password` |
+| 换端口（第一次部署时） | `sudo bash /opt/mydoc/deploy.sh --port 8080` |
+| 服务器在国外 | 加上 `--overseas`，使用官方源 |
+| 查看状态 / 日志 | `systemctl status mydoc` / `journalctl -u mydoc -f` |
+
+服务器连不上 GitHub 时：在电脑上从 GitHub 下载 ZIP，解压后上传到服务器的 `/opt/mydoc`，再运行 `sudo bash /opt/mydoc/deploy.sh --no-pull`。
+
+## Docker 部署
+
+国内服务器拉取 Docker Hub 镜像经常失败，建议用上面的一键部署。服务器上需要安装 Docker 和 Docker Compose。
 
 ```bash
 git clone <仓库地址> mydoc && cd mydoc
