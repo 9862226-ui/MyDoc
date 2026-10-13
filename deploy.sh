@@ -272,7 +272,7 @@ step "安装依赖（$NPM_REGISTRY）"
 cd "$APP_DIR"
 export NEXT_TELEMETRY_DISABLED=1
 # better-sqlite3 自带各平台的预编译文件，跳过安装脚本就不需要编译工具
-npm ci --registry="$NPM_REGISTRY" --no-audit --no-fund --loglevel=error --ignore-scripts
+npm ci --registry="$NPM_REGISTRY" --no-audit --no-fund --no-update-notifier --loglevel=error --ignore-scripts
 if ! node -e 'new (require("better-sqlite3"))(":memory:").close()' 2>/dev/null; then
   warn "数据库驱动没有可用的预编译文件，安装编译工具后现场编译（需要几分钟）"
   apt-get update -qq
