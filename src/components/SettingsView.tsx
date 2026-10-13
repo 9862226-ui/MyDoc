@@ -1,18 +1,121 @@
 "use client";
 
-import { Check, Download, FileJson, Hash, Pencil, Settings, Trash2, Upload, X } from "lucide-react";
-import { useRef, useState, type ReactNode } from "react";
+import { Info } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api, refreshData, useAppData } from "@/lib/client";
 import type { Tag } from "@/lib/types";
-import { Button, IconButton, Input, Kbd, Spinner, useModKey } from "./ui";
+import { ShortcutList } from "./HelpDialog";
+import { Button, cx, Input } from "./ui";
 import { useUI } from "./ui-context";
 
+type Section = "data" | "tags" | "keys" | "account";
+
+const SECTIONS: [Section, string][] = [
+  ["data", "导入与导出"],
+  ["tags", "标签管理"],
+  ["keys", "快捷键"],
+  ["account", "账号与安全"],
+];
+
+const isSection = (s: string): s is Section => SECTIONS.some(([k]) => k === s);
+
 export function SettingsView() {
+  const [section, setSection] = useState<Section>("data");
+
+  // 地址里的 #tags 之类可以直接打开对应分区
+  useEffect(() => {
+    const read = () => {
+      const hash = window.location.hash.slice(1);
+      if (isSection(hash)) setSection(hash);
+    };
+    read();
+    window.addEventListener("hashchange", read);
+    return () => window.removeEventListener("hashchange", read);
+  }, []);
+
+  const pick = (s: Section) => {
+    setSection(s);
+    history.replaceState(null, "", `#${s}`);
+  };
+
+  return (
+    <div className="min-h-full bg-field dark:bg-bg">
+      <div className="mx-auto flex max-w-[1080px] flex-col gap-4 p-4 md:flex-row md:items-start md:gap-6 md:p-6">
+        <nav
+          aria-label="设置分区"
+          className="-mx-4 flex shrink-0 gap-1 overflow-x-auto px-4 md:mx-0 md:w-[200px] md:flex-col md:gap-0.5 md:rounded-lg md:bg-surface md:p-2"
+        >
+          {SECTIONS.map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              aria-current={section === key ? "page" : undefined}
+              onClick={() => pick(key)}
+              className={cx(
+                "flex h-[38px] shrink-0 cursor-pointer items-center rounded-md px-3 text-left whitespace-nowrap transition-colors",
+                section === key
+                  ? "bg-accent-soft font-medium text-accent-text"
+                  : "text-fg hover:bg-hover max-md:bg-surface",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+        <div className="flex min-w-0 flex-1 flex-col gap-4">
+          {section === "data" && <DataSection />}
+          {section === "tags" && <TagsSection />}
+          {section === "keys" && (
+            <Card title="快捷键">
+              <ShortcutList />
+            </Card>
+          )}
+          {section === "account" && <AccountSection />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Card({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
+  return (
+    <section className="rounded-lg bg-surface px-5 py-5 md:px-6">
+      <h2 className="text-base font-semibold">{title}</h2>
+      {description && <p className="mt-1 text-[13px] text-muted">{description}</p>}
+      <div className="mt-2">{children}</div>
+    </section>
+  );
+}
+
+function Row({ title, description, children }: { title: ReactNode; description: ReactNode; children?: ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line-soft py-3.5 last:border-b-0 last:pb-1">
+      <div className="min-w-0 flex-[1_1_240px]">
+        <div className="font-medium">{title}</div>
+        <div className="text-[13px] text-faint">{description}</div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function ExportLink({ format }: { format: string }) {
+  return (
+    <a
+      href={`/api/export?format=${format}`}
+      download
+      className="inline-flex h-8 shrink-0 items-center rounded-md border border-control bg-surface px-4 hover:bg-hover"
+    >
+      导出
+    </a>
+  );
+}
+
+function DataSection() {
   const { data } = useAppData();
   const ui = useUI();
   const fileRef = useRef<HTMLInputElement>(null);
   const [restoring, setRestoring] = useState(false);
-  const mod = useModKey();
 
   const restore = async (file: File | undefined) => {
     if (!file) return;
@@ -22,7 +125,7 @@ export function SettingsView() {
       try {
         body = JSON.parse(await file.text());
       } catch {
-        throw new Error("文件不是有效的 JSON");
+        throw new Error("文件不是有效的 JSON 备份");
       }
       const r = await api<{ imported: number; skipped: number }>("/api/backup", { body });
       await refreshData();
@@ -35,24 +138,28 @@ export function SettingsView() {
     }
   };
 
-  const tagCount = (name: string) => data?.links.filter((l) => l.tags.includes(name)).length ?? 0;
-
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-4 pb-16 md:p-8">
-      <h1 className="flex items-center gap-2 text-xl font-semibold">
-        <Settings size={20} className="text-muted" />
-        导入导出与设置
-      </h1>
-
-      <Card title="导入" description="从其他地方把链接搬进来">
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={() => ui.importLinks()}>
-            <Upload size={15} />
-            批量导入链接 / 浏览器书签
+    <>
+      <Card title="导出数据" description="随时把数据带走，三种格式任选">
+        <Row title="JSON 备份" description="包含全部分组、项目、链接和标签，可以用来恢复">
+          <ExportLink format="json" />
+        </Row>
+        <Row title="CSV 表格" description="用 Excel 或 WPS 打开，方便查看和整理">
+          <ExportLink format="csv" />
+        </Row>
+        <Row title="浏览器书签" description="按「分组 / 项目」建好文件夹，可以导入 Chrome、Edge、Safari">
+          <ExportLink format="html" />
+        </Row>
+      </Card>
+      <Card title="导入数据" description="从别的地方把链接搬进来">
+        <Row title="批量导入链接或浏览器书签" description="粘贴多行文本、分享文案、Excel 表格，或选择书签文件">
+          <Button variant="primary" onClick={() => ui.importLinks()}>
+            批量导入
           </Button>
-          <Button onClick={() => fileRef.current?.click()} disabled={restoring}>
-            {restoring ? <Spinner size={14} /> : <FileJson size={15} />}
-            从 JSON 备份恢复
+        </Row>
+        <Row title="从 JSON 备份恢复" description="按名称合并分组和项目，已有的链接会跳过，不会删除现有数据">
+          <Button loading={restoring} onClick={() => fileRef.current?.click()}>
+            选择文件
           </Button>
           <input
             ref={fileRef}
@@ -61,83 +168,36 @@ export function SettingsView() {
             className="hidden"
             onChange={(e) => void restore(e.target.files?.[0])}
           />
-        </div>
-        <p className="mt-2 text-xs text-muted">恢复备份是合并操作：按名称合并分组和项目，已存在的链接会跳过，不会删除现有数据。</p>
+        </Row>
       </Card>
-
-      <Card title="导出" description="随时把数据带走">
-        <div className="flex flex-wrap gap-2">
-          <ExportButton format="json" label="JSON 备份（可恢复）" />
-          <ExportButton format="csv" label="CSV 表格（Excel 可打开）" />
-          <ExportButton format="html" label="浏览器书签" />
-        </div>
-        <p className="mt-2 text-xs text-muted">
-          所有数据保存在服务器的 <code className="rounded bg-surface-2 px-1">data/mydoc.db</code>{" "}
+      <section className="flex items-start gap-2.5 rounded-lg bg-surface px-5 py-4 text-[13px] text-muted md:px-6">
+        <Info size={16} className="mt-[3px] shrink-0 text-icon" />
+        <span>
+          所有数据保存在服务器的 <code className="rounded bg-field px-1 font-mono">data/mydoc.db</code>{" "}
           文件里，定期复制这个文件也是一种备份方式。
-        </p>
-      </Card>
+          {data && `当前共有 ${data.links.length} 个链接、${data.projects.length} 个项目、${data.tags.length} 个标签。`}
+        </span>
+      </section>
+    </>
+  );
+}
 
-      <Card title="标签" description="重命名为已有的标签名会把两个标签合并">
-        {!data ? (
-          <Spinner />
-        ) : data.tags.length === 0 ? (
-          <p className="text-[13px] text-muted">还没有标签。编辑链接时可以添加标签。</p>
-        ) : (
-          <ul className="divide-y divide-line">
-            {data.tags.map((t) => (
-              <TagRow key={t.id} tag={t} count={tagCount(t.name)} />
-            ))}
-          </ul>
-        )}
-      </Card>
-
-      <Card title="快捷键">
-        <ul className="grid gap-2 text-[13px] sm:grid-cols-2">
-          <Shortcut keys={[mod, "K"]} text="搜索并打开文档" />
-          <Shortcut keys={["/"]} text="搜索" />
-          <Shortcut keys={["N"]} text="添加链接" />
-          <Shortcut keys={[mod, "V"]} text="在页面空白处粘贴，快速添加" />
-          <Shortcut keys={[mod, "Enter"]} text="保存正在编辑的链接" />
-          <Shortcut keys={["Shift", "点击"]} text="连续选择多个链接" />
+function TagsSection() {
+  const { data } = useAppData();
+  const count = (name: string) =>
+    data?.links.filter((l) => l.tags.some((t) => t.toLowerCase() === name.toLowerCase())).length ?? 0;
+  return (
+    <Card title="标签管理" description="重命名成已有的标签名，两个标签会合并">
+      {!data ? null : data.tags.length === 0 ? (
+        <p className="py-6 text-center text-[13px] text-faint">还没有标签。添加或编辑链接时可以给它加标签。</p>
+      ) : (
+        <ul>
+          {data.tags.map((t) => (
+            <TagRow key={t.id} tag={t} count={count(t.name)} />
+          ))}
         </ul>
-      </Card>
-    </div>
-  );
-}
-
-function Card({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
-  return (
-    <section className="rounded-xl border border-line bg-surface p-5">
-      <h2 className="font-semibold">{title}</h2>
-      {description && <p className="mt-0.5 text-[13px] text-muted">{description}</p>}
-      <div className="mt-4">{children}</div>
-    </section>
-  );
-}
-
-function ExportButton({ format, label }: { format: string; label: string }) {
-  return (
-    <a
-      href={`/api/export?format=${format}`}
-      download
-      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line bg-surface px-3.5 font-medium hover:bg-surface-2"
-    >
-      <Download size={15} />
-      {label}
-    </a>
-  );
-}
-
-function Shortcut({ keys, text }: { keys: string[]; text: string }) {
-  return (
-    <li className="flex items-center gap-2">
-      <span className="flex gap-1">
-        {keys.map((k) => (
-          <Kbd key={k}>{k}</Kbd>
-        ))}
-      </span>
-      <span className="text-muted">{text}</span>
-    </li>
+      )}
+    </Card>
   );
 }
 
@@ -158,16 +218,18 @@ function TagRow({ tag, count }: { tag: Tag; count: number }) {
   };
 
   const save = () => {
-    if (name.trim() === tag.name) return setEditing(false);
+    if (!name.trim() || name.trim() === tag.name) {
+      setName(tag.name);
+      return setEditing(false);
+    }
     void run(() => api(`/api/tags/${tag.id}`, { method: "PATCH", body: { name } }), "已重命名");
   };
 
   return (
-    <li className="flex h-11 items-center gap-2">
-      <Hash size={14} className="shrink-0 text-muted" />
+    <li className="flex min-h-12 items-center gap-3 border-b border-line-soft last:border-b-0">
       {editing ? (
         <form
-          className="flex flex-1 items-center gap-1"
+          className="flex flex-1 items-center gap-2 py-2"
           onSubmit={(e) => {
             e.preventDefault();
             save();
@@ -175,35 +237,42 @@ function TagRow({ tag, count }: { tag: Tag; count: number }) {
         >
           <Input
             autoFocus
+            aria-label="新的标签名"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => e.key === "Escape" && setEditing(false)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setName(tag.name);
+                setEditing(false);
+              }
+            }}
             className="h-8 max-w-60"
             maxLength={30}
           />
-          <IconButton label="保存" type="submit">
-            <Check size={16} />
-          </IconButton>
-          <IconButton
-            label="取消"
+          <Button type="submit" variant="primary" size="sm">
+            保存
+          </Button>
+          <Button
+            size="sm"
             onClick={() => {
               setName(tag.name);
               setEditing(false);
             }}
           >
-            <X size={16} />
-          </IconButton>
+            取消
+          </Button>
         </form>
       ) : (
         <>
-          <span className="flex-1 truncate">{tag.name}</span>
-          <span className="text-xs text-muted">{count} 个链接</span>
-          <IconButton label="重命名" onClick={() => setEditing(true)}>
-            <Pencil size={15} />
-          </IconButton>
-          <IconButton
-            label="删除标签"
-            className="hover:text-danger"
+          <span className="max-w-[50%] truncate rounded bg-field px-2 text-[13px] leading-[22px]"># {tag.name}</span>
+          <span className="flex-1 text-[13px] text-faint">{count} 个链接</span>
+          <Button variant="text" size="sm" onClick={() => setEditing(true)}>
+            重命名
+          </Button>
+          <Button
+            variant="dangerGhost"
+            size="sm"
             onClick={async () => {
               const ok = await ui.confirm({
                 title: `删除标签「${tag.name}」？`,
@@ -214,10 +283,36 @@ function TagRow({ tag, count }: { tag: Tag; count: number }) {
               if (ok) void run(() => api(`/api/tags/${tag.id}`, { method: "DELETE" }), "已删除标签");
             }}
           >
-            <Trash2 size={15} />
-          </IconButton>
+            删除
+          </Button>
         </>
       )}
     </li>
+  );
+}
+
+function AccountSection() {
+  const [busy, setBusy] = useState(false);
+  return (
+    <Card title="账号与安全">
+      <Row title="登录密码" description="在服务器的环境变量 APP_PASSWORD 里设置，修改后重启服务生效" />
+      <Row
+        title="登录保持"
+        description="登录时勾选「30 天内免登录」，30 天内不用再输入密码；不勾选时关闭浏览器就会退出。同一来源 15 分钟内输错 10 次密码会被暂时锁定"
+      />
+      <Row title="退出登录" description="退出后需要重新输入密码">
+        <Button
+          loading={busy}
+          className="border-danger/40 text-danger-text hover:bg-danger-soft"
+          onClick={async () => {
+            setBusy(true);
+            await fetch("/api/auth/logout", { method: "POST" });
+            window.location.href = "/login";
+          }}
+        >
+          退出登录
+        </Button>
+      </Row>
+    </Card>
   );
 }

@@ -140,10 +140,16 @@ export function IconButton({
 
 /* ---------- 提示 ---------- */
 
+/** 浮层挂载的位置：在弹窗里时挂到弹窗上（弹窗外的元素在打开弹窗时无法点击），否则挂到 body */
+function overlayHost(el: Element | null | undefined): Element {
+  return el?.closest("dialog[open]") ?? document.body;
+}
+
 /** 悬停 0.4 秒或键盘聚焦时显示的深色小提示 */
 export function useTooltip(label: string) {
-  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const [anchor, setAnchor] = useState<{ rect: DOMRect; host: Element } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const show = (el: Element) => setAnchor({ rect: el.getBoundingClientRect(), host: overlayHost(el) });
 
   const hide = () => {
     clearTimeout(timer.current);
@@ -164,16 +170,16 @@ export function useTooltip(label: string) {
       if (e.pointerType !== "mouse") return;
       const el = e.currentTarget;
       clearTimeout(timer.current);
-      timer.current = setTimeout(() => el.isConnected && setAnchor(el.getBoundingClientRect()), 400);
+      timer.current = setTimeout(() => el.isConnected && show(el), 400);
     },
     onFocus(e: ReactFocusEvent<HTMLElement>) {
-      if (e.currentTarget.matches(":focus-visible")) setAnchor(e.currentTarget.getBoundingClientRect());
+      if (e.currentTarget.matches(":focus-visible")) show(e.currentTarget);
     },
-    node: anchor ? <TooltipBubble anchor={anchor} label={label} /> : null,
+    node: anchor ? <TooltipBubble anchor={anchor.rect} host={anchor.host} label={label} /> : null,
   };
 }
 
-function TooltipBubble({ anchor, label }: { anchor: DOMRect; label: string }) {
+function TooltipBubble({ anchor, host, label }: { anchor: DOMRect; host: Element; label: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
 
@@ -195,7 +201,7 @@ function TooltipBubble({ anchor, label }: { anchor: DOMRect; label: string }) {
     >
       {label}
     </div>,
-    document.body,
+    host,
   );
 }
 
@@ -343,6 +349,7 @@ const TAG_TONES = {
   accent: "bg-accent-soft text-accent-text",
   warn: "bg-warn-soft text-warn-text leading-[22px]",
   danger: "bg-danger-soft text-danger-text leading-[22px]",
+  success: "bg-success-soft text-success-text leading-[22px]",
   outline: "border border-line-strong text-fg font-mono",
 };
 
@@ -621,6 +628,20 @@ export function Dialog({
   );
 }
 
+/** 表单弹窗的底栏：放在表单里，滚动时固定在弹窗底部（弹窗要传 bodyClassName="pb-0"） */
+export function DialogFooter({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div
+      className={cx(
+        "sticky bottom-0 z-10 -mx-6 mt-2 flex flex-wrap items-center justify-end gap-2 bg-menu px-6 pt-4 pb-5",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
 /* ---------- 下拉菜单 ---------- */
 
 export type MenuItem =
@@ -646,7 +667,7 @@ export type MenuTriggerProps = {
   "aria-expanded": boolean;
 };
 
-/** 下拉菜单，渲染到 body 上避免被滚动容器裁掉（不要在弹窗里使用） */
+/** 下拉菜单，渲染到 body（或所在的弹窗）上，避免被滚动容器裁掉 */
 export function Menu({
   items,
   label = "更多操作",
@@ -701,6 +722,8 @@ export function Menu({
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        // 阻止默认行为，菜单在弹窗里时只关菜单、不关弹窗
+        e.preventDefault();
         e.stopPropagation();
         close(true);
       } else if (e.key === "Tab") {
@@ -824,7 +847,7 @@ export function Menu({
               ),
             )}
           </div>,
-          document.body,
+          overlayHost(btnRef.current),
         )}
     </>
   );

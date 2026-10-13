@@ -1,9 +1,10 @@
 "use client";
 
-import { X } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 import { useRef, useState } from "react";
 import type { AppData } from "@/lib/types";
-import { cx, Select } from "./ui";
+import { projectIndex, projectPathLabel } from "@/lib/view";
+import { cx, Menu, ProjectBadge, ProjectDot, Select, type MenuItem } from "./ui";
 
 /** <option> 列表：收件箱 + 按分组排列的项目 */
 export function ProjectOptions({ data, current }: { data: AppData; current?: number | null }) {
@@ -52,6 +53,73 @@ export function ProjectSelect({
   );
 }
 
+/** 选择项目的下拉按钮：带项目颜色，按分组列出 */
+export function ProjectPicker({
+  data,
+  value,
+  onChange,
+  id,
+  className,
+}: {
+  data: AppData;
+  value: number | null;
+  onChange: (v: number | null) => void;
+  id?: string;
+  className?: string;
+}) {
+  const info = value === null ? undefined : projectIndex(data).get(value);
+  const items: MenuItem[] = [
+    {
+      label: "收件箱（暂不归类）",
+      icon: <ProjectDot id={null} className="size-4 rounded" />,
+      checked: value === null,
+      onSelect: () => onChange(null),
+    },
+    ...data.groups.flatMap((g): MenuItem[] => {
+      const projects = data.projects.filter((p) => p.groupId === g.id && (!p.archived || p.id === value));
+      if (!projects.length) return [];
+      return [
+        { divider: true },
+        { heading: g.name },
+        ...projects.map((p) => ({
+          label: p.archived ? `${p.name}（已归档）` : p.name,
+          icon: <ProjectBadge project={p} size={16} />,
+          checked: p.id === value,
+          onSelect: () => onChange(p.id),
+        })),
+      ];
+    }),
+  ];
+  return (
+    <Menu
+      label="选择项目"
+      align="start"
+      matchWidth
+      items={items}
+      menuClassName="min-w-56"
+      trigger={(props) => (
+        <button
+          type="button"
+          id={id}
+          {...props}
+          className={cx(
+            "flex h-9 w-full cursor-pointer items-center gap-2 rounded-md border border-control bg-surface px-2.5 text-left transition-[border-color,box-shadow] hover:border-accent/60 aria-expanded:border-accent aria-expanded:ring-2 aria-expanded:ring-accent/15",
+            className,
+          )}
+        >
+          {info ? (
+            <ProjectBadge project={info.project} size={16} />
+          ) : (
+            <ProjectDot id={null} className="size-4 rounded" />
+          )}
+          <span className="min-w-0 flex-1 truncate">{info ? projectPathLabel(info) : "收件箱（暂不归类）"}</span>
+          <ChevronDown size={14} className="shrink-0 text-icon" />
+        </button>
+      )}
+    />
+  );
+}
+
 /** 标签输入：回车或逗号添加，退格删除，带已有标签的提示 */
 export function TagInput({
   value,
@@ -88,12 +156,12 @@ export function TagInput({
       <div
         onClick={() => inputRef.current?.focus()}
         className={cx(
-          "flex min-h-9 w-full cursor-text flex-wrap items-center gap-1 rounded-lg border border-line bg-surface px-1.5 py-1 transition",
-          focused && "border-accent ring-2 ring-accent/20",
+          "flex min-h-9 w-full cursor-text flex-wrap items-center gap-1.5 rounded-md border border-control bg-surface px-2 py-1 transition-[border-color,box-shadow] hover:border-accent/60",
+          focused && "border-accent ring-2 ring-accent/15 hover:border-accent",
         )}
       >
         {value.map((tag) => (
-          <span key={tag} className="inline-flex h-6 items-center gap-0.5 rounded-md bg-accent-soft pr-0.5 pl-2 text-xs text-accent">
+          <span key={tag} className="inline-flex h-6 items-center gap-0.5 rounded bg-field pr-0.5 pl-2 text-[13px]">
             {tag}
             <button
               type="button"
@@ -102,9 +170,9 @@ export function TagInput({
                 e.stopPropagation();
                 onChange(value.filter((t) => t !== tag));
               }}
-              className="rounded p-0.5 hover:bg-accent/15"
+              className="flex size-5 cursor-pointer items-center justify-center rounded text-icon hover:bg-chip hover:text-fg"
             >
-              <X size={12} />
+              <X size={12} strokeWidth={2.4} />
             </button>
           </span>
         ))}
@@ -146,11 +214,11 @@ export function TagInput({
               inputRef.current?.blur();
             }
           }}
-          className="h-7 min-w-24 flex-1 bg-transparent px-1.5 outline-none placeholder:text-muted/70"
+          className="h-[26px] min-w-28 flex-1 bg-transparent px-0.5 outline-none placeholder:text-icon"
         />
       </div>
       {showList && (
-        <div className="absolute inset-x-0 top-full z-10 mt-1 max-h-56 overflow-y-auto rounded-lg border border-line bg-surface p-1 shadow-lg">
+        <div className="absolute inset-x-0 top-full z-10 mt-1 max-h-56 overflow-y-auto rounded-lg border border-line-strong bg-menu p-1 shadow-pop">
           {matches.map((m, i) => (
             <button
               key={m}
@@ -158,8 +226,8 @@ export function TagInput({
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => add(m)}
               className={cx(
-                "flex h-8 w-full items-center rounded-md px-2.5 text-left text-[13px] hover:bg-surface-2",
-                i === active && "bg-surface-2",
+                "flex h-9 w-full cursor-pointer items-center rounded-md px-2.5 text-left hover:bg-hover",
+                i === active && "bg-hover",
               )}
             >
               # {m}

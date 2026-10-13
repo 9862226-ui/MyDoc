@@ -4,6 +4,8 @@ import { getDb, type DB } from "./db";
 
 export const SESSION_COOKIE = "mydoc_session";
 export const SESSION_DAYS = 30;
+/** 不勾选「30 天内免登录」时，服务器端会话的有效期（浏览器关闭后 Cookie 也会消失） */
+export const SHORT_SESSION_DAYS = 1;
 
 const sha256 = (s: string) => crypto.createHash("sha256").update(s).digest();
 
@@ -17,9 +19,9 @@ export function verifyPassword(input: string): boolean {
   return crypto.timingSafeEqual(sha256(input), sha256(expected));
 }
 
-export function createSession(db: DB): { token: string; expires: Date } {
+export function createSession(db: DB, days = SESSION_DAYS): { token: string; expires: Date } {
   const token = crypto.randomBytes(32).toString("base64url");
-  const expires = new Date(Date.now() + SESSION_DAYS * 86400_000);
+  const expires = new Date(Date.now() + days * 86400_000);
   db.prepare("DELETE FROM sessions WHERE expires_at < ?").run(new Date().toISOString());
   db.prepare("INSERT INTO sessions (token_hash, created_at, expires_at) VALUES (?, ?, ?)").run(
     sha256(token).toString("hex"),
@@ -57,8 +59,9 @@ export function shouldUseSecureCookie(req: Request): boolean {
 
 // ---------- 登录失败限制：同一来源 15 分钟内最多失败 10 次 ----------
 
-const MAX_FAILURES = 10;
-const WINDOW_MS = 15 * 60_000;
+export const MAX_FAILURES = 10;
+export const FAILURE_WINDOW_MINUTES = 15;
+const WINDOW_MS = FAILURE_WINDOW_MINUTES * 60_000;
 const failures = new Map<string, { count: number; resetAt: number }>();
 
 export function clientKey(req: Request): string {
@@ -74,10 +77,15 @@ export function lockedSeconds(key: string): number {
   return entry.count >= MAX_FAILURES ? Math.ceil((entry.resetAt - Date.now()) / 1000) : 0;
 }
 
-export function recordFailure(key: string): void {
+/** 记一次失败，返回锁定前还能再试几次 */
+export function recordFailure(key: string): number {
   const entry = failures.get(key);
-  if (!entry || entry.resetAt < Date.now()) failures.set(key, { count: 1, resetAt: Date.now() + WINDOW_MS });
-  else entry.count++;
+  if (!entry || entry.resetAt < Date.now()) {
+    failures.set(key, { count: 1, resetAt: Date.now() + WINDOW_MS });
+    return MAX_FAILURES - 1;
+  }
+  entry.count++;
+  return Math.max(0, MAX_FAILURES - entry.count);
 }
 
 export function clearFailures(key: string): void {

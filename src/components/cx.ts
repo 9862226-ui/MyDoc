@@ -37,6 +37,8 @@ const twMerge = extendTailwindMerge({
         "danger-soft",
         "danger-text",
         "success",
+        "success-soft",
+        "success-text",
         "star",
         "kbd",
         "kbd-line",
