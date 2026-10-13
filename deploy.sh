@@ -217,7 +217,8 @@ NEED_MB=$([ "$MODE" = docker ] && echo 3000 || echo 1200)
 
 # ---------- 2. 代码 ----------
 step "准备代码"
-git_() { git -c safe.directory="$APP_DIR" -C "$APP_DIR" "$@"; }
+# 不用 git -C：CentOS 7 自带的 git 1.8 不支持
+git_() { (cd "$APP_DIR" && git -c safe.directory="$APP_DIR" "$@"); }
 if [ ! -f "$APP_DIR/package.json" ]; then
   echo "从 $REPO_URL 下载到 $APP_DIR"
   git clone --depth 1 "$REPO_URL" "$APP_DIR" ||
