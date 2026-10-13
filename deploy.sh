@@ -142,7 +142,7 @@ else
   [ -n "$NODE_VERSION" ] || die "获取 Node.js 版本列表失败，请检查网络"
   echo "下载 Node.js $NODE_VERSION ($NODE_ARCH)"
   TMP_TAR=$(mktemp)
-  curl -fL --retry 3 --progress-bar -o "$TMP_TAR" "$NODE_DIST/$NODE_VERSION/node-$NODE_VERSION-linux-$NODE_ARCH.tar.xz" ||
+  curl -fL --retry 3 $([ -t 1 ] && echo --progress-bar || echo -sS) -o "$TMP_TAR" "$NODE_DIST/$NODE_VERSION/node-$NODE_VERSION-linux-$NODE_ARCH.tar.xz" ||
     die "下载 Node.js 失败，请检查网络"
   mkdir -p /usr/local/lib/nodejs
   rm -rf "/usr/local/lib/nodejs/node-$NODE_VERSION"
@@ -260,7 +260,15 @@ fi
 step "安装依赖（$NPM_REGISTRY）"
 cd "$APP_DIR"
 export NEXT_TELEMETRY_DISABLED=1
-npm ci --registry="$NPM_REGISTRY" --no-audit --no-fund --loglevel=error
+# better-sqlite3 自带各平台的预编译文件，跳过安装脚本就不需要编译工具
+npm ci --registry="$NPM_REGISTRY" --no-audit --no-fund --loglevel=error --ignore-scripts
+if ! node -e 'new (require("better-sqlite3"))(":memory:").close()' 2>/dev/null; then
+  warn "数据库驱动没有可用的预编译文件，安装编译工具后现场编译（需要几分钟）"
+  apt-get update -qq
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential python3 >/dev/null
+  npm rebuild better-sqlite3 --loglevel=error
+  node -e 'new (require("better-sqlite3"))(":memory:").close()' || die "数据库驱动安装失败"
+fi
 ok "依赖安装完成"
 
 step "构建（大约 1~3 分钟）"
