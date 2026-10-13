@@ -60,17 +60,20 @@ export function ProjectPicker({
   onChange,
   id,
   className,
+  noneLabel = "收件箱（暂不归类）",
 }: {
   data: AppData;
   value: number | null;
   onChange: (v: number | null) => void;
   id?: string;
   className?: string;
+  /** 不选项目时显示的文字 */
+  noneLabel?: string;
 }) {
   const info = value === null ? undefined : projectIndex(data).get(value);
   const items: MenuItem[] = [
     {
-      label: "收件箱（暂不归类）",
+      label: noneLabel,
       icon: <ProjectDot id={null} className="size-4 rounded" />,
       checked: value === null,
       onSelect: () => onChange(null),
@@ -112,7 +115,7 @@ export function ProjectPicker({
           ) : (
             <ProjectDot id={null} className="size-4 rounded" />
           )}
-          <span className="min-w-0 flex-1 truncate">{info ? projectPathLabel(info) : "收件箱（暂不归类）"}</span>
+          <span className="min-w-0 flex-1 truncate">{info ? projectPathLabel(info) : noneLabel}</span>
           <ChevronDown size={14} className="shrink-0 text-icon" />
         </button>
       )}

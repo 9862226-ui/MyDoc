@@ -13,6 +13,7 @@ import {
   List,
   Pencil,
   Plus,
+  Quote,
   Search,
   Share2,
   Sparkles,
@@ -53,6 +54,7 @@ import {
 } from "@/lib/view";
 import { LinkCard, LinkRow, LinkTableHeader } from "./LinkItem";
 import { LINKS_MIME } from "./Sidebar";
+import { ProjectSnippets } from "./Snippets";
 import {
   AlarmIcon,
   Banner,
@@ -382,6 +384,7 @@ export function LinksView({ view }: { view: ViewSpec }) {
         { label: "编辑项目", icon: <Pencil size={15} />, onSelect: () => ui.editProject(project) },
         { label: "分享项目", icon: <Share2 size={15} />, onSelect: () => ui.shareProject(project) },
         { label: "添加链接", icon: <Plus size={15} />, onSelect: () => ui.addLink() },
+        { label: "添加摘录", icon: <Quote size={15} />, onSelect: () => ui.editSnippet() },
         { label: "批量导入", icon: <Upload size={15} />, onSelect: () => ui.importLinks() },
         { divider: true },
         project.archived
@@ -590,6 +593,8 @@ export function LinksView({ view }: { view: ViewSpec }) {
           )}
         </div>
       )}
+
+      {project && <ProjectSnippets projectId={project.id} />}
 
       {selected.size > 0 && (
         <BatchBar

@@ -108,6 +108,20 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX idx_shares_project ON shares(project_id);
   `,
+  `
+  CREATE TABLE snippets (
+    id INTEGER PRIMARY KEY,
+    content TEXT NOT NULL,
+    project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+    tags_json TEXT NOT NULL DEFAULT '[]',
+    source_url TEXT NOT NULL DEFAULT '',
+    source_title TEXT NOT NULL DEFAULT '',
+    pinned INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_snippets_project ON snippets(project_id);
+  `,
 ];
 
 export function migrate(db: DB): void {

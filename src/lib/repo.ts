@@ -1,6 +1,7 @@
 import type { DB } from "./db";
 import { HttpError } from "./errors";
 import { pinyinIndex } from "./pinyin";
+import { createSnippet, listSnippets } from "./snippet-repo";
 import { importReminders, listReminders, toBackupReminder, type BackupReminder } from "./reminder-repo";
 import type { AppData, Group, Link, Project, Tag } from "./types";
 import { urlKey } from "./url";
@@ -89,7 +90,9 @@ export function getAppData(db: DB): AppData {
   for (const g of groups) g.py = pinyinIndex(g.name);
   for (const p of projects) p.py = pinyinIndex(p.name);
   for (const l of links) l.py = pinyinIndex(l.title, ...l.tags);
-  return { groups, projects, tags, links, reminders: listReminders(db) };
+  const snippets = listSnippets(db);
+  for (const s of snippets) s.py = pinyinIndex(s.content.slice(0, 200), s.sourceTitle, ...s.tags);
+  return { groups, projects, tags, links, reminders: listReminders(db), snippets };
 }
 
 export function getLink(db: DB, id: number): Link {
@@ -475,6 +478,7 @@ export interface Backup {
   }[];
   inbox: BackupLink[];
   reminders?: BackupReminder[];
+  snippets?: BackupSnippet[];
 }
 
 function toBackupLink(l: Link): BackupLink {
@@ -509,11 +513,67 @@ export function exportBackup(db: DB): Backup {
     })),
     inbox: linksOf(null),
     reminders: data.reminders.map(toBackupReminder),
+    snippets: data.snippets.map((s) => {
+      const p = data.projects.find((x) => x.id === s.projectId);
+      const g = p && data.groups.find((x) => x.id === p.groupId);
+      return {
+        content: s.content,
+        group: g?.name ?? null,
+        project: p?.name ?? null,
+        tags: s.tags,
+        sourceUrl: s.sourceUrl,
+        sourceTitle: s.sourceTitle,
+        pinned: s.pinned,
+        createdAt: s.createdAt,
+      };
+    }),
   };
 }
 
 /** 从备份恢复：按名称合并分组和项目，已存在的链接跳过 */
-export function importBackup(db: DB, backup: Backup): { imported: number; skipped: number; reminders: number } {
+export interface BackupSnippet {
+  content: string;
+  /** 所在的分组和项目名称，恢复时按名称找项目 */
+  group: string | null;
+  project: string | null;
+  tags: string[];
+  sourceUrl: string;
+  sourceTitle: string;
+  pinned: boolean;
+  createdAt: string;
+}
+
+/** 从备份恢复摘录：内容完全相同的跳过 */
+function importSnippets(db: DB, list: BackupSnippet[]): number {
+  const exists = db.prepare("SELECT 1 FROM snippets WHERE content = ?");
+  const findProject = db.prepare(
+    "SELECT p.id FROM projects p JOIN link_groups g ON g.id = p.group_id WHERE g.name = ? AND p.name = ?",
+  );
+  let added = 0;
+  for (const s of list) {
+    if (!s.content.trim() || exists.get(s.content)) continue;
+    const found = s.group && s.project ? (findProject.get(s.group, s.project) as { id: number } | undefined) : undefined;
+    createSnippet(
+      db,
+      {
+        content: s.content,
+        projectId: found?.id ?? null,
+        tags: s.tags,
+        sourceUrl: s.sourceUrl,
+        sourceTitle: s.sourceTitle,
+        pinned: s.pinned,
+      },
+      s.createdAt,
+    );
+    added++;
+  }
+  return added;
+}
+
+export function importBackup(
+  db: DB,
+  backup: Backup,
+): { imported: number; skipped: number; reminders: number; snippets: number } {
   const existing = new Set(
     (db.prepare("SELECT url FROM links WHERE deleted_at IS NULL").all() as { url: string }[]).map((r) =>
       urlKey(r.url),
@@ -522,6 +582,7 @@ export function importBackup(db: DB, backup: Backup): { imported: number; skippe
   let imported = 0;
   let skipped = 0;
   let reminders = 0;
+  let snippets = 0;
   const insert = db.prepare(
     `INSERT INTO links (project_id, title, url, note, access_code, expires_at, pinned, favorite, visit_count,
        last_visited_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -571,6 +632,7 @@ export function importBackup(db: DB, backup: Backup): { imported: number; skippe
     }
     addLinks(null, backup.inbox);
     reminders = importReminders(db, backup.reminders ?? []);
+    snippets = importSnippets(db, backup.snippets ?? []);
   })();
-  return { imported, skipped, reminders };
+  return { imported, skipped, reminders, snippets };
 }

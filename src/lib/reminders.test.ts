@@ -123,6 +123,6 @@ describe("提醒的增删改", () => {
 
   it("旧版本的备份没有提醒也能恢复", () => {
     const old = { app: "mydoc", version: 1, exportedAt: "2026-01-01T00:00:00Z", groups: [], inbox: [] };
-    expect(repo.importBackup(db, backupSchema.parse(old))).toEqual({ imported: 0, skipped: 0, reminders: 0 });
+    expect(repo.importBackup(db, backupSchema.parse(old))).toEqual({ imported: 0, skipped: 0, reminders: 0, snippets: 0 });
   });
 });

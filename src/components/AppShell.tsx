@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { refreshData } from "@/lib/client";
 import { parseShareText } from "@/lib/share-text";
-import type { Group, Link, Project, Reminder } from "@/lib/types";
+import type { Group, Link, Project, Reminder, Snippet } from "@/lib/types";
 import { CommandPalette } from "./CommandPalette";
 import { AiOrganizeDialog, autoClassify, useAiSettings } from "./AiOrganize";
 import { AddTagsDialog, ConfirmDialog, GroupDialog, ProjectDialog } from "./dialogs";
@@ -13,6 +13,7 @@ import { ImportDialog } from "./ImportDialog";
 import { LinkDialog } from "./LinkDialog";
 import { ReminderDialog } from "./Reminders";
 import { ShareDialog } from "./ShareDialog";
+import { SnippetDialog, type SnippetInit } from "./Snippets";
 import { Sidebar } from "./Sidebar";
 import { MobileHeader, TabBar, TopBar } from "./Topbar";
 import { ToastCard } from "./ui";
@@ -45,6 +46,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   });
   const [reminderDialog, setReminderDialog] = useState<{ open: boolean; reminder?: Reminder }>({ open: false });
   const [shareTarget, setShareTarget] = useState<Project | null>(null);
+  const [snippetDialog, setSnippetDialog] = useState<{ open: boolean; snippet?: Snippet; init?: SnippetInit }>({
+    open: false,
+  });
   const [aiIds, setAiIds] = useState<number[] | null>(null);
   const { data: ai } = useAiSettings();
   const aiRef = useRef(ai);
@@ -78,6 +82,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       addTagsTo: (ids, done) => setTagTarget({ ids, done }),
       editReminder: (reminder) => setReminderDialog({ open: true, reminder }),
       shareProject: (project) => setShareTarget(project),
+      editSnippet: (snippet, init) => setSnippetDialog({ open: true, snippet, init }),
       organizeWithAi: (ids) => setAiIds(ids),
       linkAdded: (link) => {
         const s = aiRef.current;
@@ -173,6 +178,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         onClose={() => setReminderDialog({ open: false })}
       />
       <ShareDialog project={shareTarget} onClose={() => setShareTarget(null)} />
+      <SnippetDialog
+        open={snippetDialog.open}
+        snippet={snippetDialog.snippet}
+        init={snippetDialog.init}
+        onClose={() => setSnippetDialog({ open: false })}
+      />
       <AiOrganizeDialog ids={aiIds} onClose={() => setAiIds(null)} />
       <AddTagsDialog ids={tagTarget?.ids ?? null} onDone={tagTarget?.done} onClose={() => setTagTarget(null)} />
       <ConfirmDialog

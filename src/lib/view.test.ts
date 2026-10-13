@@ -29,6 +29,7 @@ const data: AppData = {
   projects: [{ id: 10, groupId: 1, name: "官网改版", description: "", archived: false, sort: 0 }],
   tags: [],
   reminders: [],
+  snippets: [],
   links: [
     link(1, { title: "需求文档", projectId: 10, url: "https://a.feishu.cn/docx/1", tags: ["需求"], visitCount: 3 }),
     link(2, { title: "排期表", url: "https://docs.qq.com/sheet/2", lastVisitedAt: "2026-10-01T00:00:00Z" }),

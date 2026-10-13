@@ -6,9 +6,10 @@ import * as rr from "./reminder-repo";
 import { isReminderDue, reminderState, sortReminders } from "./reminders";
 import * as repo from "./repo";
 import { parseShareText } from "./share-text";
-import type { AppData, Link, Reminder } from "./types";
+import * as sr from "./snippet-repo";
+import type { AppData, Link, Reminder, Snippet } from "./types";
 import { toHttpUrl, urlKey } from "./url";
-import { projectIndex, projectPathLabel, search } from "./view";
+import { projectIndex, projectPathLabel, search, snippetMatches } from "./view";
 
 /** 工具执行时出的错：返回给 AI 看，方便它自己改正 */
 export class ToolError extends Error {}
@@ -64,6 +65,16 @@ function linkOut(l: Link, data: AppData) {
   out.visitCount = l.visitCount;
   if (l.lastVisitedAt) out.lastVisitedAt = l.lastVisitedAt;
   out.createdAt = l.createdAt;
+  return out;
+}
+
+function snippetOut(s: Snippet, data: AppData) {
+  const out: Record<string, unknown> = { id: s.id, content: s.content };
+  if (s.projectId !== null) out.project = projectPathLabel(projectIndex(data).get(s.projectId));
+  if (s.tags.length) out.tags = s.tags;
+  if (s.sourceUrl) out.sourceUrl = s.sourceUrl;
+  if (s.sourceTitle) out.sourceTitle = s.sourceTitle;
+  out.createdAt = s.createdAt;
   return out;
 }
 
@@ -440,6 +451,76 @@ export const TOOLS: Tool[] = [
       const r = getReminder(db, a.id);
       rr.deleteReminder(db, a.id);
       return { deleted: true, title: r.title };
+    },
+  }),
+
+  tool({
+    name: "search_snippets",
+    title: "搜索摘录",
+    description:
+      "在摘录（用户收集的文字片段，例如会议结论、账号说明、文章段落）里搜索，内容、来源、标签、项目名都会匹配，支持拼音。" +
+      "不填 query 时按最新列出。",
+    input: z.object({
+      query: z.string().optional(),
+      project: projectRef.optional(),
+      limit: z.number().int().min(1).max(100).default(20),
+    }),
+    annotations: { readOnlyHint: true },
+    run: ({ db }, a) => {
+      const data = repo.getAppData(db);
+      let list = data.snippets.filter((x) => snippetMatches(x, data, a.query ?? ""));
+      if (a.project !== undefined) {
+        const pid = resolveProject(data, a.project);
+        list = list.filter((x) => x.projectId === pid);
+      }
+      return { total: list.length, snippets: list.slice(0, a.limit).map((x) => snippetOut(x, data)) };
+    },
+  }),
+
+  tool({
+    name: "add_snippet",
+    title: "添加摘录",
+    description: "把一段文字存成摘录，可以放进项目、加标签、记下来源网页。适合保存不是链接的内容。",
+    input: z.object({
+      content: z.string().trim().min(1).max(20000),
+      project: projectRef.optional().describe("放进哪个项目，不填就不放进项目"),
+      tags: tags.optional(),
+      source_url: z.string().max(4096).optional().describe("来源网页"),
+      source_title: z.string().trim().max(200).optional(),
+    }),
+    run: ({ db }, a) => {
+      const data = repo.getAppData(db);
+      let sourceUrl = "";
+      if (a.source_url) {
+        sourceUrl = toHttpUrl(a.source_url) ?? "";
+        if (!sourceUrl) throw new ToolError("来源链接格式不正确（只支持 http / https 链接）");
+      }
+      const s = sr.createSnippet(db, {
+        content: a.content,
+        projectId: a.project === undefined ? null : resolveProject(data, a.project),
+        tags: a.tags ?? [],
+        sourceUrl,
+        sourceTitle: a.source_title ?? "",
+        pinned: false,
+      });
+      return snippetOut(s, repo.getAppData(db));
+    },
+  }),
+
+  tool({
+    name: "delete_snippet",
+    title: "删除摘录",
+    description: "彻底删除一条摘录（无法恢复）。",
+    input: z.object({ id }),
+    annotations: { destructiveHint: true, idempotentHint: true },
+    run: ({ db }, a) => {
+      try {
+        sr.deleteSnippet(db, a.id);
+      } catch (e) {
+        if (e instanceof HttpError) throw new ToolError(`摘录 ${a.id} 不存在`);
+        throw e;
+      }
+      return { deleted: true };
     },
   }),
 ];

@@ -29,6 +29,7 @@ export function useCreateMenu(): MenuItem[] {
   return [
     { label: "添加链接", icon: <NavIcon name="link" />, shortcut: "N", onSelect: () => ui.addLink() },
     { label: "批量导入", icon: <NavIcon name="import" />, onSelect: () => ui.importLinks() },
+    { label: "添加摘录", icon: <NavIcon name="quote" />, onSelect: () => ui.editSnippet() },
     { label: "添加提醒", icon: <NavIcon name="bell" />, onSelect: () => ui.editReminder() },
     { divider: true },
     {
@@ -226,6 +227,14 @@ export function Sidebar({ variant = "sidebar" }: { variant?: "sidebar" | "page" 
             count={counts.expiring}
             warn
             active={pathname === "/expiring"}
+            className={rowH}
+          />
+          <NavItem
+            href="/snippets"
+            icon="quote"
+            label="摘录"
+            count={data?.snippets.length ?? 0}
+            active={pathname === "/snippets"}
             className={rowH}
           />
           <NavItem

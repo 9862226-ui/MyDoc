@@ -64,12 +64,30 @@ export interface Reminder {
   updatedAt: string;
 }
 
+/** 摘录：一段文字，例如会议结论、账号说明、文章里的一段话 */
+export interface Snippet {
+  id: number;
+  content: string;
+  /** null 表示没放进项目 */
+  projectId: number | null;
+  tags: string[];
+  /** 来源网页，可以为空 */
+  sourceUrl: string;
+  sourceTitle: string;
+  pinned: boolean;
+  createdAt: string;
+  updatedAt: string;
+  /** 拼音，用于拼音搜索（只在 /api/data 里有） */
+  py?: string;
+}
+
 export interface AppData {
   groups: Group[];
   projects: Project[];
   tags: Tag[];
   links: Link[];
   reminders: Reminder[];
+  snippets: Snippet[];
 }
 
 export interface LinkDraft {

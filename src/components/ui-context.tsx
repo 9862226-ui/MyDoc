@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { api, copyText, refreshData, shareText, trackVisit } from "@/lib/client";
-import type { Group, Link, Project, Reminder } from "@/lib/types";
+import type { Group, Link, Project, Reminder, Snippet } from "@/lib/types";
 
 export interface LinkInit {
   url?: string;
@@ -36,6 +36,8 @@ export interface UI {
   editProject(project?: Project, groupId?: number): void;
   addTagsTo(ids: number[], done?: () => void): void;
   editReminder(reminder?: Reminder): void;
+  /** 添加或编辑摘录 */
+  editSnippet(snippet?: Snippet, init?: { content?: string; sourceUrl?: string; sourceTitle?: string }): void;
   /** 把项目分享成只读链接 */
   shareProject(project: Project): void;
   /** 打开「AI 整理」，给这些链接出归类建议 */

@@ -166,6 +166,49 @@ const backupLink = z.object({
   tags: tags.default([]),
 });
 
+const backupSnippet = z.object({
+  content: z.string().max(20000),
+  group: z.string().nullable().default(null),
+  project: z.string().nullable().default(null),
+  tags: tags.default([]),
+  sourceUrl: z.string().max(4096).default(""),
+  sourceTitle: z.string().max(200).default(""),
+  pinned: z.boolean().default(false),
+  createdAt: z.string().default(() => new Date().toISOString()),
+});
+
+const snippetFields = {
+  content: z.string().trim().min(1, "内容不能为空").max(20000, "内容太长了（最多 2 万字）"),
+  projectId: id.nullable(),
+  tags,
+  sourceUrl: z
+    .string()
+    .trim()
+    .max(4096)
+    .transform((s, ctx) => {
+      if (!s) return "";
+      const url = toHttpUrl(s);
+      if (!url) {
+        ctx.addIssue({ code: "custom", message: "来源链接格式不正确" });
+        return z.NEVER;
+      }
+      return url;
+    }),
+  sourceTitle: z.string().trim().max(200, "来源标题太长了"),
+  pinned: z.boolean(),
+};
+
+export const snippetCreateSchema = z.object({
+  content: snippetFields.content,
+  projectId: snippetFields.projectId.default(null),
+  tags: snippetFields.tags.default([]),
+  sourceUrl: snippetFields.sourceUrl.default(""),
+  sourceTitle: snippetFields.sourceTitle.default(""),
+  pinned: snippetFields.pinned.default(false),
+});
+
+export const snippetPatchSchema = z.object(snippetFields).partial();
+
 export const backupSchema = z.object({
   app: z.literal("mydoc", { message: "不是 MyDoc 的备份文件" }),
   version: z.literal(1),
@@ -185,6 +228,7 @@ export const backupSchema = z.object({
   ),
   inbox: z.array(backupLink).default([]),
   reminders: z.array(backupReminder).default([]),
+  snippets: z.array(backupSnippet).default([]),
 });
 
 export const notifyConfigSchema = z.object({

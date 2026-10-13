@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, CircleAlert, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ClipboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type ReactNode } from "react";
 import { api, refreshData, useAppData } from "@/lib/client";
 import { addDays, shortDate } from "@/lib/format";
 import { platformLabel } from "@/lib/platforms";
@@ -43,6 +43,7 @@ export function LinkDialog({
   link,
   init,
   onSaved,
+  switchTo,
 }: {
   open: boolean;
   onClose: () => void;
@@ -50,10 +51,12 @@ export function LinkDialog({
   init?: LinkInit;
   /** 保存成功后调用（在 onClose 之前） */
   onSaved?: () => void;
+  /** 表单顶部的切换，例如「收藏链接 / 保存为摘录」 */
+  switchTo?: ReactNode;
 }) {
   return (
     <Dialog open={open} onClose={onClose} title={link ? "编辑链接" : "添加链接"} bodyClassName="pb-0">
-      <LinkForm link={link} init={init} onDone={onClose} onSaved={onSaved} />
+      <LinkForm link={link} init={init} onDone={onClose} onSaved={onSaved} switchTo={switchTo} />
     </Dialog>
   );
 }
@@ -68,11 +71,13 @@ function LinkForm({
   init,
   onDone,
   onSaved,
+  switchTo,
 }: {
   link?: Link;
   init?: LinkInit;
   onDone: () => void;
   onSaved?: () => void;
+  switchTo?: ReactNode;
 }) {
   const { data } = useAppData();
   const ui = useUI();
@@ -219,6 +224,7 @@ function LinkForm({
       }}
       className="flex flex-col gap-[18px]"
     >
+      {switchTo}
       {recognized.length > 0 && (
         <Banner
           tone="success"

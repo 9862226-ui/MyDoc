@@ -1,5 +1,5 @@
 import { detectPlatform } from "./platforms";
-import type { AppData, Group, Link, Project } from "./types";
+import type { AppData, Group, Link, Project, Snippet } from "./types";
 
 export type ViewSpec =
   | { kind: "inbox" }
@@ -188,12 +188,25 @@ export function applyFilters(links: Link[], data: AppData, f: Filters): Link[] {
 export interface SearchResult {
   links: Link[];
   projects: ProjectInfo[];
+  snippets: Snippet[];
+}
+
+/** 摘录是否对得上所有关键词（内容、来源、标签、项目名，支持拼音） */
+export function snippetMatches(s: Snippet, data: AppData, query: string, index = projectIndex(data)): boolean {
+  const ts = terms(query);
+  if (!ts.length) return true;
+  const info = s.projectId === null ? undefined : index.get(s.projectId);
+  const hay = [s.content, s.sourceTitle, s.sourceUrl, s.tags.join(" "), info ? projectPathLabel(info) : ""]
+    .join("\n")
+    .toLowerCase();
+  const pys = [s.py, info?.project.py, info?.group?.py].filter((x): x is string => !!x);
+  return ts.every((t) => termMatches(t, hay, pys));
 }
 
 /** 全局搜索：所有关键词都要匹配；标题匹配、常用的排前面 */
 export function search(data: AppData, query: string, limit = 30): SearchResult {
   const ts = terms(query);
-  if (!ts.length) return { links: [], projects: [] };
+  if (!ts.length) return { links: [], projects: [], snippets: [] };
   const index = projectIndex(data);
   const q = query.trim().toLowerCase();
 
@@ -225,5 +238,6 @@ export function search(data: AppData, query: string, limit = 30): SearchResult {
   });
   projects.sort((a, b) => Number(a.project.archived) - Number(b.project.archived));
 
-  return { links: scored.slice(0, limit).map(([l]) => l), projects: projects.slice(0, 6) };
+  const snippets = data.snippets.filter((s) => snippetMatches(s, data, query, index)).slice(0, 8);
+  return { links: scored.slice(0, limit).map(([l]) => l), projects: projects.slice(0, 6), snippets };
 }

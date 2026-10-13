@@ -1,17 +1,23 @@
 "use client";
 
-import { Search } from "lucide-react";
+import { Quote, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useAppData } from "@/lib/client";
+import { copyText, useAppData } from "@/lib/client";
 import { platformLabel } from "@/lib/platforms";
-import type { Link } from "@/lib/types";
+import type { Link, Snippet } from "@/lib/types";
 import { pinyinHits, projectIndex, projectPathLabel, search, type ProjectInfo } from "@/lib/view";
 import { cx, DocIcon, Kbd, ProjectBadge, useModKey } from "./ui";
-import { useLinkActions } from "./ui-context";
+import { useLinkActions, useUI } from "./ui-context";
 
-type Item = { type: "link"; link: Link } | { type: "project"; info: ProjectInfo };
-type Scope = "all" | "links" | "projects";
+type Item =
+  | { type: "link"; link: Link }
+  | { type: "project"; info: ProjectInfo }
+  | { type: "snippet"; snippet: Snippet };
+type Scope = "all" | "links" | "projects" | "snippets";
+
+/** 摘录在列表里只显示第一行 */
+const firstLine = (text: string) => text.trim().split(/\n/)[0].slice(0, 120);
 
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -78,6 +84,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
   const { data } = useAppData();
   const router = useRouter();
   const actions = useLinkActions();
+  const ui = useUI();
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<Scope>("all");
   const [active, setActive] = useState(0);
@@ -110,9 +117,22 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
     return [
       {
         title: "项目",
-        items: scope === "links" ? [] : result.projects.map((info): Item => ({ type: "project", info })),
+        items:
+          scope === "all" || scope === "projects"
+            ? result.projects.map((info): Item => ({ type: "project", info }))
+            : [],
       },
-      { title: "链接", items: scope === "projects" ? [] : result.links.map((link): Item => ({ type: "link", link })) },
+      {
+        title: "链接",
+        items: scope === "all" || scope === "links" ? result.links.map((link): Item => ({ type: "link", link })) : [],
+      },
+      {
+        title: "摘录",
+        items:
+          scope === "all" || scope === "snippets"
+            ? result.snippets.map((snippet): Item => ({ type: "snippet", snippet }))
+            : [],
+      },
     ].filter((s) => s.items.length);
   }, [data, result, scope]);
 
@@ -126,15 +146,20 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
   const choose = (item: Item, copy = false) => {
     onClose();
     if (item.type === "project") router.push(`/p/${item.info.project.id}`);
+    else if (item.type === "snippet")
+      void copyText(item.snippet.content).then((ok) =>
+        ui.toast(ok ? "已复制摘录" : "复制失败", { kind: ok ? "ok" : "error" }),
+      );
     else if (copy) void actions.copy(item.link);
     else actions.open(item.link);
   };
 
   const scopes: [Scope, string][] = result
     ? [
-        ["all", `全部 ${result.links.length + result.projects.length}`],
+        ["all", `全部 ${result.links.length + result.projects.length + result.snippets.length}`],
         ["links", `链接 ${result.links.length}`],
         ["projects", `项目 ${result.projects.length}`],
+        ...(result.snippets.length ? [["snippets", `摘录 ${result.snippets.length}`] as [Scope, string]] : []),
       ]
     : [];
 
@@ -221,7 +246,13 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
                 const selected = idx === current;
                 return (
                   <button
-                    key={item.type === "link" ? `l${item.link.id}` : `p${item.info.project.id}`}
+                    key={
+                      item.type === "link"
+                        ? `l${item.link.id}`
+                        : item.type === "snippet"
+                          ? `s${item.snippet.id}`
+                          : `p${item.info.project.id}`
+                    }
                     type="button"
                     data-index={idx}
                     aria-selected={selected}
@@ -251,6 +282,27 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
                           </span>
                         )}
                       </>
+                    ) : item.type === "snippet" ? (
+                      <>
+                        <span
+                          aria-hidden
+                          className="flex size-8 shrink-0 items-center justify-center rounded-md bg-[#7B61FF] text-white"
+                        >
+                          <Quote size={16} />
+                        </span>
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="truncate">{highlight(firstLine(item.snippet.content), query)}</span>
+                          <span className="truncate text-xs leading-5 text-faint">
+                            {[
+                              "摘录",
+                              item.snippet.projectId !== null && projectPathLabel(index.get(item.snippet.projectId)),
+                              item.snippet.sourceTitle,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </span>
+                        </span>
+                      </>
                     ) : (
                       <>
                         <ProjectBadge project={item.info.project} size={32} />
@@ -272,7 +324,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
                     )}
                     {selected && (
                       <span className="shrink-0 text-xs text-faint max-sm:hidden">
-                        ↵ {item.type === "project" ? "进入" : "打开"}
+                        ↵ {item.type === "project" ? "进入" : item.type === "snippet" ? "复制" : "打开"}
                       </span>
                     )}
                   </button>

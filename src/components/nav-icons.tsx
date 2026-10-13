@@ -1,6 +1,7 @@
 import {
   AlarmClock,
   Bell,
+  Quote,
   Clock,
   FolderPlus,
   Inbox,
@@ -22,6 +23,7 @@ const ICONS = {
   star: Star,
   alarm: AlarmClock,
   bell: Bell,
+  quote: Quote,
   layers: Layers,
   clock: Clock,
   trash: Trash2,
