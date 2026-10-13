@@ -42,15 +42,18 @@ export function LinkDialog({
   onClose,
   link,
   init,
+  onSaved,
 }: {
   open: boolean;
   onClose: () => void;
   link?: Link;
   init?: LinkInit;
+  /** 保存成功后调用（在 onClose 之前） */
+  onSaved?: () => void;
 }) {
   return (
     <Dialog open={open} onClose={onClose} title={link ? "编辑链接" : "添加链接"} bodyClassName="pb-0">
-      <LinkForm link={link} init={init} onDone={onClose} />
+      <LinkForm link={link} init={init} onDone={onClose} onSaved={onSaved} />
     </Dialog>
   );
 }
@@ -60,7 +63,17 @@ function recognizedText(parts: string[]): string {
   return parts.length > 1 ? `${parts.slice(0, -1).join("、")}和${parts[parts.length - 1]}` : parts[0];
 }
 
-function LinkForm({ link, init, onDone }: { link?: Link; init?: LinkInit; onDone: () => void }) {
+function LinkForm({
+  link,
+  init,
+  onDone,
+  onSaved,
+}: {
+  link?: Link;
+  init?: LinkInit;
+  onDone: () => void;
+  onSaved?: () => void;
+}) {
   const { data } = useAppData();
   const ui = useUI();
   const actions = useLinkActions();
@@ -75,13 +88,13 @@ function LinkForm({ link, init, onDone }: { link?: Link; init?: LinkInit; onDone
   const [accessCode, setAccessCode] = useState(link?.accessCode ?? init?.accessCode ?? "");
   const [expiryMode, setExpiryMode] = useState<ExpiryMode>(link?.expiresAt ? "custom" : "forever");
   const [customDate, setCustomDate] = useState(link?.expiresAt ?? "");
-  const [note, setNote] = useState(link?.note ?? "");
+  const [note, setNote] = useState(link?.note ?? init?.note ?? "");
   const [favorite, setFavorite] = useState(link?.favorite ?? false);
   const [pinned, setPinned] = useState(link?.pinned ?? false);
   const [titleStatus, setTitleStatus] = useState<TitleStatus>("idle");
   // 从分享文案里识别出的内容，用于顶部提示
   const [recognized, setRecognized] = useState<string[]>(() =>
-    !link && init?.url && (init.title || init.accessCode)
+    !link && init?.pasted && init.url && (init.title || init.accessCode)
       ? ["链接", ...(init.title ? ["标题"] : []), ...(init.accessCode ? ["提取码"] : [])]
       : [],
   );
@@ -173,6 +186,7 @@ function LinkForm({ link, init, onDone }: { link?: Link; init?: LinkInit; onDone
       else await api("/api/links", { body });
       await refreshData();
       ui.toast(link ? "已保存" : "已添加");
+      onSaved?.();
       onDone();
     } catch (e) {
       setError((e as Error).message);

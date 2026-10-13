@@ -10,6 +10,9 @@ export interface LinkInit {
   accessCode?: string;
   projectId?: number | null;
   tags?: string[];
+  note?: string;
+  /** 来自粘贴的分享文案（添加窗口顶部会提示识别结果） */
+  pasted?: boolean;
 }
 
 export interface ConfirmOptions {

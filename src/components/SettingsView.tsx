@@ -1,17 +1,18 @@
 "use client";
 
-import { Info } from "lucide-react";
+import { Bookmark, Copy, Info } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { api, refreshData, useAppData } from "@/lib/client";
+import { api, copyText, refreshData, useAppData } from "@/lib/client";
 import type { Tag } from "@/lib/types";
 import { ShortcutList } from "./HelpDialog";
-import { Button, cx, Input } from "./ui";
+import { Button, cx, Input, Kbd, useModKey } from "./ui";
 import { useUI } from "./ui-context";
 
-type Section = "data" | "tags" | "keys" | "account";
+type Section = "data" | "bookmarklet" | "tags" | "keys" | "account";
 
 const SECTIONS: [Section, string][] = [
   ["data", "导入与导出"],
+  ["bookmarklet", "收藏按钮"],
   ["tags", "标签管理"],
   ["keys", "快捷键"],
   ["account", "账号与安全"],
@@ -64,6 +65,7 @@ export function SettingsView() {
         </nav>
         <div className="flex min-w-0 flex-1 flex-col gap-4">
           {section === "data" && <DataSection />}
+          {section === "bookmarklet" && <BookmarkletSection />}
           {section === "tags" && <TagsSection />}
           {section === "keys" && (
             <Card title="快捷键">
@@ -313,6 +315,80 @@ function AccountSection() {
           退出登录
         </Button>
       </Row>
+    </Card>
+  );
+}
+
+/** 书签栏上的「收藏到 MyDoc」按钮：在任意网页点一下，弹出添加窗口 */
+export function bookmarkletCode(origin: string): string {
+  return (
+    "javascript:(function(){" +
+    `var u='${origin}/add?url='+encodeURIComponent(location.href)` +
+    "+'&title='+encodeURIComponent(document.title)" +
+    "+'&note='+encodeURIComponent(String(window.getSelection()||'').slice(0,500));" +
+    "var w=window.open(u,'mydoc','width=640,height=800,resizable=yes,scrollbars=yes');" +
+    "if(!w)location.href=u;})();"
+  );
+}
+
+function BookmarkletSection() {
+  const ui = useUI();
+  const mod = useModKey();
+  const linkRef = useRef<HTMLAnchorElement>(null);
+  const [code, setCode] = useState("");
+
+  useEffect(() => {
+    const c = bookmarkletCode(window.location.origin);
+    setCode(c);
+    // React 不允许直接写 javascript: 链接，这里手动设置
+    linkRef.current?.setAttribute("href", c);
+  }, []);
+
+  return (
+    <Card
+      title="浏览器收藏按钮"
+      description="把下面的按钮放到浏览器的书签栏。看到有用的网页时点一下，就会弹出添加窗口，网址和标题都已填好；网页上选中的文字会作为备注。"
+    >
+      <div className="flex flex-col items-start gap-5 py-3">
+        <a
+          ref={linkRef}
+          href="#"
+          draggable
+          onClick={(e) => {
+            e.preventDefault();
+            ui.toast("请把按钮拖到书签栏，在别的网页上点它", { kind: "info" });
+          }}
+          className="inline-flex h-10 cursor-grab items-center gap-2 rounded-md border-2 border-dashed border-accent/50 bg-accent-soft px-4 font-medium text-accent-text active:cursor-grabbing"
+        >
+          <Bookmark size={16} />
+          收藏到 MyDoc
+        </a>
+        <ol className="flex list-decimal flex-col gap-1.5 pl-5 text-muted">
+          <li>
+            显示书签栏：Chrome、Edge 按 <Kbd>{mod}</Kbd> <Kbd>Shift</Kbd> <Kbd>B</Kbd>
+          </li>
+          <li>用鼠标把上面的「收藏到 MyDoc」按钮拖到书签栏上</li>
+          <li>打开任意网页，点书签栏上的「收藏到 MyDoc」</li>
+        </ol>
+      </div>
+      <Row
+        title="拖不动？"
+        description="复制代码后，在书签栏上右键「添加网页 / 添加书签」，名称填「收藏到 MyDoc」，网址粘贴刚才复制的代码"
+      >
+        <Button
+          disabled={!code}
+          onClick={async () => {
+            const ok = await copyText(code);
+            ui.toast(ok ? "已复制，去新建书签粘贴到网址里" : "复制失败", { kind: ok ? "ok" : "error" });
+          }}
+        >
+          <Copy size={15} />
+          复制代码
+        </Button>
+      </Row>
+      <p className="mt-3 text-[13px] text-faint">
+        手机浏览器不方便用书签按钮：在手机上复制网址，打开 MyDoc 点右下角的「+」粘贴即可。
+      </p>
     </Card>
   );
 }

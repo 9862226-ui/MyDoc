@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button, Checkbox, Input } from "@/components/ui";
 
-export function LoginForm() {
+export function LoginForm({ next = "/" }: { next?: string }) {
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
   const [error, setError] = useState("");
@@ -23,7 +23,7 @@ export function LoginForm() {
             body: JSON.stringify({ password, remember }),
           });
           if (res.ok) {
-            window.location.href = "/";
+            window.location.href = next;
             return;
           }
           const data = (await res.json().catch(() => ({}))) as { error?: string };

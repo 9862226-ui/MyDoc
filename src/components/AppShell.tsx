@@ -97,7 +97,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       const items = parseShareText(text);
       if (!items.length) return;
       e.preventDefault();
-      if (items.length === 1) setLinkDialog({ open: true, init: items[0] });
+      if (items.length === 1) setLinkDialog({ open: true, init: { ...items[0], pasted: true } });
       else setImportDialog({ open: true, text });
     };
     document.addEventListener("keydown", onKey);

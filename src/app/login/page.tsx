@@ -51,8 +51,14 @@ function BrandCards() {
   );
 }
 
-export default async function LoginPage() {
-  if (await isAuthenticated()) redirect("/");
+/** 只允许跳回本站的路径，防止被利用跳到别的网站 */
+function safeNext(next: string | undefined): string {
+  return next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/";
+}
+
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
+  const next = safeNext((await searchParams).next);
+  if (await isAuthenticated()) redirect(next);
   return (
     <div className="flex min-h-dvh">
       <section
@@ -86,7 +92,7 @@ export default async function LoginPage() {
             <p className="mt-1 text-muted">输入访问密码进入你的文档链接库</p>
           </div>
           {isPasswordConfigured() ? (
-            <LoginForm />
+            <LoginForm next={next} />
           ) : (
             <p role="alert" className="rounded-md bg-warn-soft px-3.5 py-2.5 leading-relaxed text-warn-text">
               还没有设置登录密码。请在服务器上设置环境变量 <code className="font-mono">APP_PASSWORD</code> 后重启服务。

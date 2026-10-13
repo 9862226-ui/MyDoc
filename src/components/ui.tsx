@@ -598,7 +598,7 @@ export function Dialog({
         if (downOnBackdrop.current && e.target === ref.current) onClose();
       }}
       className={cx(
-        "m-auto w-[calc(100%-24px)] overflow-hidden rounded-xl border-0 bg-menu p-0 shadow-dialog open:animate-[dialog-in_160ms_ease-out]",
+        "m-auto w-[calc(100%-24px)] overflow-hidden rounded-xl border-0 bg-menu p-0 text-left shadow-dialog open:animate-[dialog-in_160ms_ease-out]",
         size === "sm"
           ? "max-w-[400px]"
           : size === "lg"
