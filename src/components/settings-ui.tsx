@@ -69,7 +69,13 @@ export function PillRadio<T extends string>({
 }
 
 /** 上次执行的结果：成功是灰色，失败是红色 */
-export function LastResult({ label, result }: { label: string; result?: { at: string; ok: boolean; message: string } }) {
+export function LastResult({
+  label,
+  result,
+}: {
+  label: string;
+  result?: { at: string; ok: boolean; message: string };
+}) {
   if (!result) return null;
   return (
     <p className={cx("text-[13px]", result.ok ? "text-faint" : "text-danger-text")}>
