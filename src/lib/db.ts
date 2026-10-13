@@ -78,6 +78,16 @@ const MIGRATIONS: string[] = [
     updated_at TEXT NOT NULL
   );
   `,
+  `
+  CREATE TABLE api_tokens (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,
+    prefix TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    last_used_at TEXT
+  );
+  `,
 ];
 
 export function migrate(db: DB): void {

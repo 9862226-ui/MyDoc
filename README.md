@@ -37,6 +37,10 @@
 - 记录账号、域名、服务器、会员的到期时间，可设置每月 / 每年重复和提前几天提醒
 - 快到期时在工作台和侧边栏提醒；续费后点「已续期」自动顺延到下一个周期
 
+**接入 AI 助手（MCP）**
+
+- Claude、Cursor、Cherry Studio 等支持 MCP 的 AI 助手可以直接搜索、收藏、整理链接，查看和续期提醒事项，见下方「[接入 AI 助手](#接入-ai-助手mcp)」
+
 **数据**
 
 - 导出 JSON（可恢复）、CSV（Excel 打开）、浏览器书签 HTML
@@ -136,6 +140,31 @@ location / {
 
 用自动备份恢复：停止服务，用备份文件替换 `data/mydoc.db`，删除 `data/mydoc.db-wal` 和 `data/mydoc.db-shm`，再启动服务。
 
+## 接入 AI 助手（MCP）
+
+MyDoc 提供 [MCP](https://modelcontextprotocol.io/) 接口（Streamable HTTP），地址是 `https://你的域名/api/mcp`。
+
+1. 打开「设置 › AI 助手（MCP）」，点「创建令牌」，页面会给出各个客户端的配置写法（令牌只显示一次）
+2. 按客户端配置，例如：
+   - Claude Code：`claude mcp add --transport http mydoc https://你的域名/api/mcp --header "Authorization: Bearer 你的令牌"`
+   - Cursor、Cherry Studio 等：在 MCP 配置里填地址 `https://你的域名/api/mcp`，请求头 `Authorization: Bearer 你的令牌`
+   - Claude 桌面版：用 `npx mcp-remote` 转接，设置页里有完整配置
+3. 然后就可以说「帮我找一下官网改版的排期表」「把这个链接收藏到 工作/官网改版」「最近有哪些账号快到期了？」
+
+提供的工具：
+
+| 工具 | 作用 |
+| --- | --- |
+| `search_links` | 按关键词、项目、标签、收藏搜索链接 |
+| `get_link` | 查看一个链接的全部信息 |
+| `list_projects` | 列出分组、项目、标签和链接数量 |
+| `add_link` | 收藏链接（自动获取标题、识别分享文案里的提取码、不重复收藏） |
+| `update_link` / `delete_link` | 修改、移动链接；删除（进回收站） |
+| `create_project` | 新建项目（分组不存在时自动创建） |
+| `list_reminders` / `add_reminder` / `update_reminder` / `complete_reminder` / `delete_reminder` | 管理提醒事项 |
+
+令牌和登录密码一样重要：不用的令牌及时在设置里删除；AI 助手不在服务器本机时，请先配置 HTTPS，否则令牌会明文传输。
+
 ## 不用 Docker 部署
 
 需要 Node.js 22 或更高版本。
@@ -184,4 +213,5 @@ src/
 - 所有页面和接口都需要登录；同一来源 15 分钟内输错密码 10 次会被暂时锁定（输错时会提示还能再试几次）
 - 只接受 http / https 链接
 - 「获取标题」由服务器去访问链接，已禁止访问内网和本机地址
+- MCP 接口只认「设置」里创建的访问令牌，数据库里只保存令牌的哈希；删除令牌立即失效
 - 登录时勾选「30 天内免登录」会保持登录 30 天；不勾选时关闭浏览器就需要重新登录；退出登录后立即失效

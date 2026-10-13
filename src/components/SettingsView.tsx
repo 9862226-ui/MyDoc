@@ -1,19 +1,22 @@
 "use client";
 
 import { Bookmark, Copy, Info } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import { api, copyText, refreshData, useAppData } from "@/lib/client";
 import type { Tag } from "@/lib/types";
 import { ShortcutList } from "./HelpDialog";
+import { McpSection } from "./McpSettings";
+import { Card, Row } from "./settings-ui";
 import { Button, cx, Input, Kbd, useModKey } from "./ui";
 import { useUI } from "./ui-context";
 
-type Section = "data" | "bookmarklet" | "tags" | "keys" | "account";
+type Section = "data" | "bookmarklet" | "mcp" | "tags" | "keys" | "account";
 
 const SECTIONS: [Section, string][] = [
   ["data", "导入与导出"],
   ["bookmarklet", "收藏按钮"],
+  ["mcp", "AI 助手（MCP）"],
   ["tags", "标签管理"],
   ["keys", "快捷键"],
   ["account", "账号与安全"],
@@ -67,6 +70,7 @@ export function SettingsView() {
         <div className="flex min-w-0 flex-1 flex-col gap-4">
           {section === "data" && <DataSection />}
           {section === "bookmarklet" && <BookmarkletSection />}
+          {section === "mcp" && <McpSection />}
           {section === "tags" && <TagsSection />}
           {section === "keys" && (
             <Card title="快捷键">
@@ -76,28 +80,6 @@ export function SettingsView() {
           {section === "account" && <AccountSection />}
         </div>
       </div>
-    </div>
-  );
-}
-
-function Card({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
-  return (
-    <section className="rounded-lg bg-surface px-5 py-5 md:px-6">
-      <h2 className="text-base font-semibold">{title}</h2>
-      {description && <p className="mt-1 text-[13px] text-muted">{description}</p>}
-      <div className="mt-2">{children}</div>
-    </section>
-  );
-}
-
-function Row({ title, description, children }: { title: ReactNode; description: ReactNode; children?: ReactNode }) {
-  return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line-soft py-3.5 last:border-b-0 last:pb-1">
-      <div className="min-w-0 flex-[1_1_240px]">
-        <div className="font-medium">{title}</div>
-        <div className="text-[13px] text-faint">{description}</div>
-      </div>
-      {children}
     </div>
   );
 }
