@@ -14,6 +14,7 @@ import {
   Pencil,
   Plus,
   Search,
+  Share2,
   Star,
   StarOff,
   Tag as TagIcon,
@@ -378,6 +379,7 @@ export function LinksView({ view }: { view: ViewSpec }) {
   const projectMenu: MenuItem[] = project
     ? [
         { label: "编辑项目", icon: <Pencil size={15} />, onSelect: () => ui.editProject(project) },
+        { label: "分享项目", icon: <Share2 size={15} />, onSelect: () => ui.shareProject(project) },
         { label: "添加链接", icon: <Plus size={15} />, onSelect: () => ui.addLink() },
         { label: "批量导入", icon: <Upload size={15} />, onSelect: () => ui.importLinks() },
         { divider: true },
@@ -400,6 +402,12 @@ export function LinksView({ view }: { view: ViewSpec }) {
           <p className="mt-0.5 text-[13px] text-muted">{header.meta}</p>
         </div>
         <div className="hidden items-center gap-2 md:flex">
+          {project && (
+            <Button onClick={() => ui.shareProject(project)}>
+              <Share2 size={15} />
+              分享
+            </Button>
+          )}
           {header.canAdd && (
             <Button onClick={() => ui.importLinks()}>
               <Upload size={15} />

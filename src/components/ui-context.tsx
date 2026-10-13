@@ -36,6 +36,8 @@ export interface UI {
   editProject(project?: Project, groupId?: number): void;
   addTagsTo(ids: number[], done?: () => void): void;
   editReminder(reminder?: Reminder): void;
+  /** 把项目分享成只读链接 */
+  shareProject(project: Project): void;
   confirm(options: ConfirmOptions): Promise<boolean>;
   toast(message: string, options?: ToastOptions): void;
   /** 当前页面对应的项目，新建链接时默认放进去 */

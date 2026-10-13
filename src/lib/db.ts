@@ -94,6 +94,20 @@ const MIGRATIONS: string[] = [
     value TEXT NOT NULL
   );
   `,
+  `
+  CREATE TABLE shares (
+    id INTEGER PRIMARY KEY,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    token TEXT NOT NULL UNIQUE,
+    password_hash TEXT,
+    show_notes INTEGER NOT NULL DEFAULT 0,
+    expires_at TEXT,
+    view_count INTEGER NOT NULL DEFAULT 0,
+    last_viewed_at TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_shares_project ON shares(project_id);
+  `,
 ];
 
 export function migrate(db: DB): void {

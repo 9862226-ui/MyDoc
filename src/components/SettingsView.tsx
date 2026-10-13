@@ -7,17 +7,19 @@ import type { Tag } from "@/lib/types";
 import { AutoBackupCard, BackupSyncCard } from "./BackupSettings";
 import { ShortcutList } from "./HelpDialog";
 import { McpSection } from "./McpSettings";
+import { SharesSection } from "./ShareDialog";
 import { NotifySection } from "./NotifySettings";
 import { Card, Row } from "./settings-ui";
 import { Button, cx, Input, Kbd, useModKey } from "./ui";
 import { useUI } from "./ui-context";
 
-type Section = "data" | "backup" | "notify" | "bookmarklet" | "mcp" | "tags" | "keys" | "account";
+type Section = "data" | "backup" | "notify" | "shares" | "bookmarklet" | "mcp" | "tags" | "keys" | "account";
 
 const SECTIONS: [Section, string][] = [
   ["data", "导入与导出"],
   ["backup", "备份"],
   ["notify", "提醒推送"],
+  ["shares", "分享链接"],
   ["bookmarklet", "浏览器"],
   ["mcp", "AI 助手（MCP）"],
   ["tags", "标签管理"],
@@ -79,6 +81,7 @@ export function SettingsView() {
             </>
           )}
           {section === "notify" && <NotifySection />}
+          {section === "shares" && <SharesSection />}
           {section === "bookmarklet" && (
             <>
               <BookmarkletSection />

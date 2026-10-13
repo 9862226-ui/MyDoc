@@ -10,6 +10,7 @@ import { HelpDialog } from "./HelpDialog";
 import { ImportDialog } from "./ImportDialog";
 import { LinkDialog } from "./LinkDialog";
 import { ReminderDialog } from "./Reminders";
+import { ShareDialog } from "./ShareDialog";
 import { Sidebar } from "./Sidebar";
 import { MobileHeader, TabBar, TopBar } from "./Topbar";
 import { ToastCard } from "./ui";
@@ -41,6 +42,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     open: false,
   });
   const [reminderDialog, setReminderDialog] = useState<{ open: boolean; reminder?: Reminder }>({ open: false });
+  const [shareTarget, setShareTarget] = useState<Project | null>(null);
   const [tagTarget, setTagTarget] = useState<{ ids: number[]; done?: () => void } | null>(null);
   const [confirmState, setConfirmState] = useState<{ options: ConfirmOptions; resolve: (ok: boolean) => void } | null>(
     null,
@@ -68,6 +70,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       editProject: (project, groupId) => setProjectDialog({ open: true, project, groupId }),
       addTagsTo: (ids, done) => setTagTarget({ ids, done }),
       editReminder: (reminder) => setReminderDialog({ open: true, reminder }),
+      shareProject: (project) => setShareTarget(project),
       confirm: (options) => new Promise<boolean>((resolve) => setConfirmState({ options, resolve })),
       toast,
       defaultProjectId,
@@ -155,6 +158,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         reminder={reminderDialog.reminder}
         onClose={() => setReminderDialog({ open: false })}
       />
+      <ShareDialog project={shareTarget} onClose={() => setShareTarget(null)} />
       <AddTagsDialog ids={tagTarget?.ids ?? null} onDone={tagTarget?.done} onClose={() => setTagTarget(null)} />
       <ConfirmDialog
         options={confirmState?.options ?? null}
