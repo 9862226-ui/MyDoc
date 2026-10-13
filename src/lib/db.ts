@@ -64,6 +64,20 @@ const MIGRATIONS: string[] = [
     expires_at TEXT NOT NULL
   );
   `,
+  `
+  CREATE TABLE reminders (
+    id INTEGER PRIMARY KEY,
+    title TEXT NOT NULL,
+    due_date TEXT NOT NULL,
+    repeat TEXT NOT NULL DEFAULT 'none',
+    remind_days INTEGER NOT NULL DEFAULT 7,
+    url TEXT NOT NULL DEFAULT '',
+    note TEXT NOT NULL DEFAULT '',
+    done_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  `,
 ];
 
 export function migrate(db: DB): void {

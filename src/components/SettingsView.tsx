@@ -130,9 +130,11 @@ function DataSection() {
       } catch {
         throw new Error("文件不是有效的 JSON 备份");
       }
-      const r = await api<{ imported: number; skipped: number }>("/api/backup", { body });
+      const r = await api<{ imported: number; skipped: number; reminders: number }>("/api/backup", { body });
       await refreshData();
-      ui.toast(`已恢复 ${r.imported} 个链接${r.skipped ? `，跳过 ${r.skipped} 个已存在的` : ""}`);
+      ui.toast(
+        `已恢复 ${r.imported} 个链接${r.reminders ? `、${r.reminders} 个提醒` : ""}${r.skipped ? `，跳过 ${r.skipped} 个已存在的链接` : ""}`,
+      );
     } catch (e) {
       ui.toast((e as Error).message, { kind: "error" });
     } finally {
@@ -144,7 +146,7 @@ function DataSection() {
   return (
     <>
       <Card title="导出数据" description="随时把数据带走，三种格式任选">
-        <Row title="JSON 备份" description="包含全部分组、项目、链接和标签，可以用来恢复">
+        <Row title="JSON 备份" description="包含全部分组、项目、链接、标签和提醒，可以用来恢复">
           <ExportLink format="json" />
         </Row>
         <Row title="CSV 表格" description="用 Excel 或 WPS 打开，方便查看和整理">

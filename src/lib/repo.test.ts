@@ -163,7 +163,7 @@ describe("导入导出", () => {
     const backup = repo.exportBackup(db);
 
     const db2 = openDb(":memory:");
-    expect(repo.importBackup(db2, backup)).toEqual({ imported: 2, skipped: 0 });
+    expect(repo.importBackup(db2, backup)).toEqual({ imported: 2, skipped: 0, reminders: 0 });
     const data = repo.getAppData(db2);
     expect(data.groups.map((x) => x.name)).toEqual(["工作"]);
     expect(data.projects.map((x) => [x.name, x.description])).toEqual([["官网改版", "Q4"]]);
@@ -175,7 +175,7 @@ describe("导入导出", () => {
     expect(data.links.find((l) => l.title === "未分类")!.projectId).toBeNull();
 
     // 再恢复一次不会重复
-    expect(repo.importBackup(db2, backup)).toEqual({ imported: 0, skipped: 2 });
+    expect(repo.importBackup(db2, backup)).toEqual({ imported: 0, skipped: 2, reminders: 0 });
     expect(repo.getAppData(db2).groups).toHaveLength(1);
   });
 });

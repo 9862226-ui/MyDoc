@@ -105,6 +105,53 @@ export const importSchema = z.object({
   fetchTitles: z.boolean().default(false),
 });
 
+/** 可以为空的链接 */
+const optionalUrl = z
+  .string()
+  .trim()
+  .max(4096, "链接太长了")
+  .transform((s, ctx) => {
+    if (!s) return "";
+    const url = toHttpUrl(s);
+    if (!url) {
+      ctx.addIssue({ code: "custom", message: "链接格式不正确（只支持 http / https 链接）" });
+      return z.NEVER;
+    }
+    return url;
+  });
+
+const reminderFields = {
+  title: name("名称", 100),
+  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "请选择到期日期"),
+  repeat: z.enum(["none", "monthly", "yearly"]),
+  remindDays: z.number().int().min(0, "提前天数不正确").max(365, "最多提前 365 天"),
+  url: optionalUrl,
+  note: z.string().max(2000, "备注太长了"),
+};
+
+export const reminderCreateSchema = z.object({
+  title: reminderFields.title,
+  dueDate: reminderFields.dueDate,
+  repeat: reminderFields.repeat.default("none"),
+  remindDays: reminderFields.remindDays.default(7),
+  url: reminderFields.url.default(""),
+  note: reminderFields.note.default(""),
+});
+
+/** 修改提醒：只更新传入的字段；done 标记为已完成或重新打开 */
+export const reminderPatchSchema = z.object({ ...reminderFields, done: z.boolean() }).partial();
+
+const backupReminder = z.object({
+  title: z.string().max(100),
+  dueDate: reminderFields.dueDate,
+  repeat: reminderFields.repeat.default("none"),
+  remindDays: z.number().int().min(0).max(365).default(7),
+  url: optionalUrl.default(""),
+  note: z.string().default(""),
+  doneAt: z.string().nullable().default(null),
+  createdAt: z.string().default(() => new Date().toISOString()),
+});
+
 const backupLink = z.object({
   title: z.string().max(200),
   url: urlSchema,
@@ -137,4 +184,5 @@ export const backupSchema = z.object({
     }),
   ),
   inbox: z.array(backupLink).default([]),
+  reminders: z.array(backupReminder).default([]),
 });

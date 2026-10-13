@@ -1,5 +1,6 @@
 import type { DB } from "./db";
 import { HttpError } from "./errors";
+import { importReminders, listReminders, toBackupReminder, type BackupReminder } from "./reminder-repo";
 import type { AppData, Group, Link, Project, Tag } from "./types";
 import { urlKey } from "./url";
 
@@ -83,7 +84,7 @@ export function getAppData(db: DB): AppData {
   const links = (db.prepare(`${LINK_SELECT} WHERE l.deleted_at IS NULL ORDER BY l.id DESC`).all() as LinkRow[]).map(
     toLink,
   );
-  return { groups, projects, tags, links };
+  return { groups, projects, tags, links, reminders: listReminders(db) };
 }
 
 export function getLink(db: DB, id: number): Link {
@@ -468,6 +469,7 @@ export interface Backup {
     projects: { name: string; description: string; archived: boolean; links: BackupLink[] }[];
   }[];
   inbox: BackupLink[];
+  reminders?: BackupReminder[];
 }
 
 function toBackupLink(l: Link): BackupLink {
@@ -501,11 +503,12 @@ export function exportBackup(db: DB): Backup {
         .map((p) => ({ name: p.name, description: p.description, archived: p.archived, links: linksOf(p.id) })),
     })),
     inbox: linksOf(null),
+    reminders: data.reminders.map(toBackupReminder),
   };
 }
 
 /** 从备份恢复：按名称合并分组和项目，已存在的链接跳过 */
-export function importBackup(db: DB, backup: Backup): { imported: number; skipped: number } {
+export function importBackup(db: DB, backup: Backup): { imported: number; skipped: number; reminders: number } {
   const existing = new Set(
     (db.prepare("SELECT url FROM links WHERE deleted_at IS NULL").all() as { url: string }[]).map((r) =>
       urlKey(r.url),
@@ -513,6 +516,7 @@ export function importBackup(db: DB, backup: Backup): { imported: number; skippe
   );
   let imported = 0;
   let skipped = 0;
+  let reminders = 0;
   const insert = db.prepare(
     `INSERT INTO links (project_id, title, url, note, access_code, expires_at, pinned, favorite, visit_count,
        last_visited_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -561,6 +565,7 @@ export function importBackup(db: DB, backup: Backup): { imported: number; skippe
       }
     }
     addLinks(null, backup.inbox);
+    reminders = importReminders(db, backup.reminders ?? []);
   })();
-  return { imported, skipped };
+  return { imported, skipped, reminders };
 }

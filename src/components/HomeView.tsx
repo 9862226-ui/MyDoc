@@ -1,12 +1,13 @@
 "use client";
 
-import { FolderPlus, Plus, Search, Upload } from "lucide-react";
+import { Bell, FolderPlus, Plus, Search, Upload } from "lucide-react";
 import NextLink from "next/link";
 import { useState, type ReactNode } from "react";
 import { useAppData } from "@/lib/client";
 import { expiryInfo, shortDate, shortTime } from "@/lib/format";
 import { platformLabel } from "@/lib/platforms";
-import type { Link } from "@/lib/types";
+import { isReminderDue, reminderState, sortReminders } from "@/lib/reminders";
+import type { Link, Reminder } from "@/lib/types";
 import { daysUntil, isExpiring, projectIndex, projectPathLabel } from "@/lib/view";
 import { CodeChip, ExpiryChip } from "./LinkItem";
 import { Banner, Button, DocIcon, EmptyState, Kbd, ProjectDot, Skeleton, StarIcon, Tabs, useModKey } from "./ui";
@@ -40,6 +41,7 @@ export function HomeView() {
   };
   const inbox = data.links.filter((l) => l.projectId === null).length;
   const expiring = data.links.filter((l) => isExpiring(l)).sort((a, b) => a.expiresAt!.localeCompare(b.expiresAt!));
+  const dueReminders = sortReminders(data.reminders.filter((r) => isReminderDue(r)));
 
   return (
     <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-7 px-4 pt-3 pb-12 md:px-8 md:pt-6">
@@ -52,7 +54,7 @@ export function HomeView() {
         搜索文档、项目、标签
       </button>
 
-      {(inbox > 0 || expiring.length > 0) && (
+      {(inbox > 0 || expiring.length > 0 || dueReminders.length > 0) && (
         <div className="-mb-1 flex flex-col gap-2">
           {inbox > 0 && (
             <Banner action={<NextLink href="/inbox">去整理</NextLink>}>收件箱里有 {inbox} 个链接还没归类到项目</Banner>
@@ -60,6 +62,15 @@ export function HomeView() {
           {expiring.length > 0 && (
             <Banner tone="warn" action={<NextLink href="/expiring">查看</NextLink>}>
               {expiringMessage(expiring)}
+            </Banner>
+          )}
+          {dueReminders.length > 0 && (
+            <Banner
+              tone="warn"
+              icon={<Bell size={16} className="shrink-0 text-warn" />}
+              action={<NextLink href="/reminders">查看</NextLink>}
+            >
+              {reminderMessage(dueReminders)}
             </Banner>
           )}
         </div>
@@ -142,6 +153,12 @@ function expiringMessage(links: Link[]): string {
   }
   const first = links[0];
   return `${head}，最近的「${first.title}」${expiryInfo(first.expiresAt!).label}`;
+}
+
+function reminderMessage(list: Reminder[]): string {
+  const first = list[0];
+  const what = `「${first.title}」${reminderState(first).label}`;
+  return list.length === 1 ? `提醒：${what}` : `${list.length} 个提醒需要处理，最近的${what}`;
 }
 
 function OpenLink({ link, className, children }: { link: Link; className?: string; children: ReactNode }) {

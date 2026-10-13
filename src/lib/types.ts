@@ -38,11 +38,32 @@ export interface Link {
   tags: string[];
 }
 
+export type RepeatKind = "none" | "monthly" | "yearly";
+
+/** 提醒事项，例如账号、域名、会员的到期时间 */
+export interface Reminder {
+  id: number;
+  title: string;
+  /** YYYY-MM-DD */
+  dueDate: string;
+  repeat: RepeatKind;
+  /** 提前几天提醒，0 表示当天 */
+  remindDays: number;
+  /** 续费或管理地址，可以为空 */
+  url: string;
+  note: string;
+  /** 不重复的提醒处理完后记下时间 */
+  doneAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AppData {
   groups: Group[];
   projects: Project[];
   tags: Tag[];
   links: Link[];
+  reminders: Reminder[];
 }
 
 export interface LinkDraft {

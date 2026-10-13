@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from "re
 import { api, readLocal, refreshData, useAppData, writeLocal } from "@/lib/client";
 import type { Group, Project } from "@/lib/types";
 import { safeDecode } from "@/lib/url";
+import { isReminderDue } from "@/lib/reminders";
 import { isExpiring } from "@/lib/view";
 import { NavIcon } from "./nav-icons";
 import { cx, IconButton, Logo, Menu, ProjectBadge, Skeleton, type MenuItem } from "./ui";
@@ -28,6 +29,7 @@ export function useCreateMenu(): MenuItem[] {
   return [
     { label: "添加链接", icon: <NavIcon name="link" />, shortcut: "N", onSelect: () => ui.addLink() },
     { label: "批量导入", icon: <NavIcon name="import" />, onSelect: () => ui.importLinks() },
+    { label: "添加提醒", icon: <NavIcon name="bell" />, onSelect: () => ui.editReminder() },
     { divider: true },
     {
       label: "新建项目",
@@ -73,7 +75,8 @@ export function Sidebar({ variant = "sidebar" }: { variant?: "sidebar" | "page" 
       if (l.favorite) favorites++;
       if (isExpiring(l)) expiring++;
     }
-    return { byProject, inbox, favorites, expiring, all: data?.links.length ?? 0 };
+    const reminders = (data?.reminders ?? []).filter((r) => isReminderDue(r)).length;
+    return { byProject, inbox, favorites, expiring, reminders, all: data?.links.length ?? 0 };
   }, [data]);
 
   const toggleGroup = (id: number) => {
@@ -223,6 +226,15 @@ export function Sidebar({ variant = "sidebar" }: { variant?: "sidebar" | "page" 
             count={counts.expiring}
             warn
             active={pathname === "/expiring"}
+            className={rowH}
+          />
+          <NavItem
+            href="/reminders"
+            icon="bell"
+            label="提醒事项"
+            count={counts.reminders}
+            warn
+            active={pathname === "/reminders"}
             className={rowH}
           />
           <NavItem

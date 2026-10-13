@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { api, copyText, refreshData, shareText, trackVisit } from "@/lib/client";
-import type { Group, Link, Project } from "@/lib/types";
+import type { Group, Link, Project, Reminder } from "@/lib/types";
 
 export interface LinkInit {
   url?: string;
@@ -35,6 +35,7 @@ export interface UI {
   editGroup(group?: Group): void;
   editProject(project?: Project, groupId?: number): void;
   addTagsTo(ids: number[], done?: () => void): void;
+  editReminder(reminder?: Reminder): void;
   confirm(options: ConfirmOptions): Promise<boolean>;
   toast(message: string, options?: ToastOptions): void;
   /** 当前页面对应的项目，新建链接时默认放进去 */

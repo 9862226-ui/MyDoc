@@ -26,6 +26,7 @@ const SIMPLE_TITLES: Record<string, PageTitle> = {
   "/settings": { title: "设置" },
   "/inbox": { title: "收件箱", parent: "/projects" },
   "/expiring": { title: "即将过期", parent: "/projects" },
+  "/reminders": { title: "提醒事项", parent: "/projects" },
   "/all": { title: "全部链接", parent: "/projects" },
   "/recent": { title: "最近访问", parent: "/" },
   "/trash": { title: "回收站", parent: "/projects" },
@@ -164,7 +165,7 @@ const TABS: { href: string; label: string; icon: NavIconName; match: (p: string)
     href: "/projects",
     label: "项目",
     icon: "folder",
-    match: (p) => /^\/(projects|inbox|expiring|all|trash|p\/|t\/)/.test(p),
+    match: (p) => /^\/(projects|inbox|expiring|reminders|all|trash|p\/|t\/)/.test(p),
   },
   { href: "/favorites", label: "收藏", icon: "star", match: (p) => p === "/favorites" },
   { href: "/settings", label: "我的", icon: "user", match: (p) => p === "/settings" },
@@ -180,8 +181,8 @@ export function TabBar() {
       {showFab && (
         <button
           type="button"
-          aria-label="添加链接"
-          onClick={() => ui.addLink()}
+          aria-label={pathname === "/reminders" ? "添加提醒" : "添加链接"}
+          onClick={() => (pathname === "/reminders" ? ui.editReminder() : ui.addLink())}
           className="fixed right-5 bottom-[calc(76px+env(safe-area-inset-bottom))] z-30 flex size-[52px] cursor-pointer items-center justify-center rounded-full bg-accent text-white shadow-[0_6px_16px_rgb(51_112_255/0.4)] active:bg-accent-hover md:hidden"
         >
           <Plus size={24} strokeWidth={2.4} />
