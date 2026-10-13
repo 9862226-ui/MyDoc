@@ -19,7 +19,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { cx } from "./cx";
-import { DocIcon, Illustration, type IllustrationKind } from "./icons";
+import { Illustration, type IllustrationKind } from "./icons";
 
 export { cx };
 export { Avatar, DocIcon, Illustration, Logo, ProjectBadge, ProjectDot } from "./icons";
@@ -407,11 +407,6 @@ export function Kbd({ children, className }: { children: ReactNode; className?: 
       {children}
     </kbd>
   );
-}
-
-/** 旧名字：文档类型图标 */
-export function PlatformIcon({ url, size = 28 }: { url: string; size?: number }) {
-  return <DocIcon url={url} size={size} />;
 }
 
 const BANNER_TONES = {

@@ -42,7 +42,6 @@ const twMerge = extendTailwindMerge({
         "star",
         "kbd",
         "kbd-line",
-        "surface-2",
       ],
       shadow: ["pop", "card", "dialog"],
     },

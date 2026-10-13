@@ -12,7 +12,7 @@
   --control: #d0d3d6;
   --fg: #1f2329;
   --muted: #646a73;
-  --faint: #6e7480;
+  --faint: #686e79;
   --icon: #8f959e;
   --disabled: #c9cdd4;
   --field: #f2f3f5;
@@ -22,19 +22,19 @@
   --accent: #3370ff;
   --accent-hover: #245bdb;
   --accent-soft: rgb(51 112 255 / 0.1);
-  --accent-text: #3370ff;
+  --accent-text: #2860e0;
   --pin: #e1eaff;
   --pin-text: #245bdb;
   --warn: #ff8800;
   --warn-soft: #fff3e8;
-  --warn-text: #c25700;
+  --warn-text: #b85200;
   --danger: #d83931;
   --danger-hover: #c42b24;
   --danger-soft: #feecec;
   --danger-text: #c42b24;
   --success: #20a35a;
   --success-soft: #e8f6ee;
-  --success-text: #14804a;
+  --success-text: #127a45;
   --star: #ffb400;
   --kbd: #ffffff;
   --kbd-line: #dee0e3;
@@ -129,8 +129,6 @@
   --color-star: var(--star);
   --color-kbd: var(--kbd);
   --color-kbd-line: var(--kbd-line);
-  /* 旧名字，页面改完后可删除 */
-  --color-surface-2: var(--hover);
   --shadow-pop: 0 8px 24px var(--shadow);
   --shadow-card: 0 4px 14px var(--shadow);
   --shadow-dialog: 0 12px 40px var(--shadow);
