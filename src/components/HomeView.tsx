@@ -1,22 +1,36 @@
 "use client";
 
-import { Bell, FolderPlus, Plus, Search, Upload } from "lucide-react";
+import { Copy, FolderPlus, Plus, Quote, Search, Upload } from "lucide-react";
 import NextLink from "next/link";
 import { useState, type ReactNode } from "react";
 import { useAppData } from "@/lib/client";
 import { expiryInfo, shortDate, shortTime } from "@/lib/format";
 import { platformLabel } from "@/lib/platforms";
 import { isReminderDue, reminderState, sortReminders } from "@/lib/reminders";
-import type { Link, Reminder } from "@/lib/types";
+import type { Link, Reminder, Snippet } from "@/lib/types";
 import { daysUntil, isExpiring, projectIndex, projectPathLabel } from "@/lib/view";
 import { CodeChip, ExpiryChip } from "./LinkItem";
-import { Banner, Button, DocIcon, EmptyState, Kbd, ProjectDot, Skeleton, StarIcon, Tabs, useModKey } from "./ui";
+import { SetupChecklist } from "./SetupChecklist";
+import { useSnippetActions } from "./Snippets";
+import {
+  Banner,
+  Button,
+  DocIcon,
+  EmptyState,
+  IconButton,
+  Kbd,
+  ProjectDot,
+  Skeleton,
+  StarIcon,
+  Tabs,
+  useModKey,
+} from "./ui";
 import { useLinkActions, useUI } from "./ui-context";
 
 const QUICK_LIMIT = 10;
 const LIST_LIMIT = 8;
 
-type Tab = "recent" | "added";
+type Tab = "recent" | "added" | "snippets";
 
 export function HomeView() {
   const { data } = useAppData();
@@ -32,7 +46,7 @@ export function HomeView() {
     .filter((l) => l.favorite)
     .sort((a, b) => b.visitCount - a.visitCount || (b.lastVisitedAt ?? "").localeCompare(a.lastVisitedAt ?? ""))
     .slice(0, QUICK_LIMIT);
-  const lists: Record<Tab, Link[]> = {
+  const lists: Record<Exclude<Tab, "snippets">, Link[]> = {
     recent: data.links
       .filter((l) => l.lastVisitedAt)
       .sort((a, b) => b.lastVisitedAt!.localeCompare(a.lastVisitedAt!))
@@ -59,22 +73,18 @@ export function HomeView() {
           {inbox > 0 && (
             <Banner action={<NextLink href="/inbox">去整理</NextLink>}>收件箱里有 {inbox} 个链接还没归类到项目</Banner>
           )}
-          {expiring.length > 0 && (
-            <Banner tone="warn" action={<NextLink href="/expiring">查看</NextLink>}>
-              {expiringMessage(expiring)}
-            </Banner>
-          )}
-          {dueReminders.length > 0 && (
+          {(expiring.length > 0 || dueReminders.length > 0) && (
             <Banner
               tone="warn"
-              icon={<Bell size={16} className="shrink-0 text-warn" />}
-              action={<NextLink href="/reminders">查看</NextLink>}
+              action={<NextLink href={dueReminders.length ? "/reminders" : "/expiring"}>查看</NextLink>}
             >
-              {reminderMessage(dueReminders)}
+              {dueMessage(dueReminders, expiring)}
             </Banner>
           )}
         </div>
       )}
+
+      <SetupChecklist />
 
       <section aria-labelledby="quick-title" className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
@@ -107,16 +117,24 @@ export function HomeView() {
             items={[
               { value: "recent", label: "最近访问" },
               { value: "added", label: "最近添加" },
+              ...(data.snippets.length ? [{ value: "snippets" as const, label: "最近摘录" }] : []),
             ]}
           />
           <NextLink
-            href={tab === "recent" ? "/recent" : "/all"}
+            href={tab === "recent" ? "/recent" : tab === "snippets" ? "/snippets" : "/all"}
             className="shrink-0 text-[13px] text-muted hover:text-accent-text"
           >
             查看全部
           </NextLink>
         </div>
-        {lists[tab].length === 0 ? (
+        {tab === "snippets" ? (
+          <RecentSnippets
+            snippets={[...data.snippets]
+              .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id)
+              .slice(0, LIST_LIMIT)}
+            index={index}
+          />
+        ) : lists[tab].length === 0 ? (
           <p className="py-10 text-center text-[13px] text-faint">打开过的链接会显示在这里</p>
         ) : (
           <div className="md:overflow-x-auto">
@@ -143,6 +161,41 @@ export function HomeView() {
   );
 }
 
+/** 最近的摘录：第一行、所在项目、时间，点复制 */
+function RecentSnippets({ snippets, index }: { snippets: Snippet[]; index: ReturnType<typeof projectIndex> }) {
+  const actions = useSnippetActions();
+  return (
+    <ul>
+      {snippets.map((s) => (
+        <li
+          key={s.id}
+          className="flex items-center gap-3 border-b border-line-soft px-1 py-2.5 md:px-3 md:hover:bg-hover"
+        >
+          <span
+            aria-hidden
+            className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[#7B61FF] text-white"
+          >
+            <Quote size={14} />
+          </span>
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate" title={s.content}>
+              {s.content.trim().split("\n")[0]}
+            </span>
+            <span className="truncate text-xs leading-5 text-faint">
+              {s.projectId === null ? "未放进项目" : projectPathLabel(index.get(s.projectId))}
+              {" · "}
+              {shortTime(s.createdAt)}
+            </span>
+          </span>
+          <IconButton label="复制" size="sm" onClick={() => void actions.copy(s)}>
+            <Copy size={14} />
+          </IconButton>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** 例如：3 个分享链接即将到期或已过期，其中「合同扫描件」已于 10月10日 过期 */
 function expiringMessage(links: Link[]): string {
   const head = `${links.length} 个分享链接即将到期或已过期`;
@@ -159,6 +212,13 @@ function reminderMessage(list: Reminder[]): string {
   const first = list[0];
   const what = `「${first.title}」${reminderState(first).label}`;
   return list.length === 1 ? `提醒：${what}` : `${list.length} 个提醒需要处理，最近的${what}`;
+}
+
+/** 到期提醒横幅：只有一类时说具体的，两类都有时合起来说 */
+function dueMessage(reminders: Reminder[], links: Link[]): string {
+  if (!links.length) return reminderMessage(reminders);
+  if (!reminders.length) return expiringMessage(links);
+  return `到期提醒：${reminders.length} 个账号或会员、${links.length} 个分享链接快到期或已过期，最近的「${reminders[0].title}」${reminderState(reminders[0]).label}`;
 }
 
 function OpenLink({ link, className, children }: { link: Link; className?: string; children: ReactNode }) {

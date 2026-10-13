@@ -31,6 +31,7 @@ import {
   Tag,
   Textarea,
 } from "./ui";
+import { DueHeader } from "./DueHeader";
 import { useUI } from "./ui-context";
 
 const REPEATS: RepeatKind[] = ["none", "monthly", "yearly"];
@@ -283,36 +284,19 @@ export function RemindersView() {
 }
 
 function Page({ count, children }: { count?: number; children: ReactNode }) {
-  const ui = useUI();
   const { data: notify } = useSWR("/api/settings/notify", (url: string) => api<{ config: NotifyConfig }>(url));
   return (
     <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-6 px-4 pt-4 pb-12 md:px-8 md:pt-6">
-      <div className="flex items-start gap-4">
-        <span
-          aria-hidden
-          className="flex size-11 shrink-0 items-center justify-center rounded-[10px] bg-warn text-white md:size-12"
-        >
-          <Bell size={22} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h1 className="hidden text-xl leading-7 font-semibold md:block">提醒事项</h1>
-          <p className="mt-0.5 text-[13px] text-muted">
-            账号、域名、会员的到期时间{count ? ` · ${count} 个` : ""}
-            {notify && !notify.config.enabled && (
-              <>
-                {" · "}
-                <NextLink href="/settings#notify" className="text-accent-text hover:underline">
-                  开启微信 / 钉钉推送
-                </NextLink>
-              </>
-            )}
-          </p>
-        </div>
-        <Button variant="primary" className="hidden md:inline-flex" onClick={() => ui.editReminder()}>
-          <Plus size={16} />
-          添加提醒
-        </Button>
-      </div>
+      <DueHeader active="accounts" />
+      {!!count && notify && !notify.config.enabled && (
+        <p className="-mt-2 text-[13px] text-muted">
+          快到期时只会在 MyDoc 里提醒。
+          <NextLink href="/settings#notify" className="text-accent-text hover:underline">
+            开启微信 / 钉钉推送
+          </NextLink>
+          ，不打开 MyDoc 也不会错过。
+        </p>
+      )}
       {children}
     </div>
   );

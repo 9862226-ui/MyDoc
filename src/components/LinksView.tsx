@@ -53,6 +53,7 @@ import {
   type ViewSpec,
 } from "@/lib/view";
 import { LinkCard, LinkRow, LinkTableHeader } from "./LinkItem";
+import { DueHeader } from "./DueHeader";
 import { LINKS_MIME } from "./Sidebar";
 import { ProjectSnippets } from "./Snippets";
 import {
@@ -396,8 +397,9 @@ export function LinksView({ view }: { view: ViewSpec }) {
 
   return (
     <Page>
-      {/* 页头 */}
-      <div className="flex items-start gap-x-4 gap-y-3 md:flex-wrap">
+      {/* 页头；「即将过期」是「到期提醒」页的一个标签 */}
+      {view.kind === "expiring" && <DueHeader active="links" />}
+      <div className={cx("flex items-start gap-x-4 gap-y-3 md:flex-wrap", view.kind === "expiring" && "hidden")}>
         {header.tile}
         <div className="min-w-0 flex-1 md:flex-[1_1_260px]">
           {/* 手机端标题已经在顶栏 */}

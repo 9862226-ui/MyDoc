@@ -221,12 +221,12 @@ export function Sidebar({ variant = "sidebar" }: { variant?: "sidebar" | "page" 
             />
           )}
           <NavItem
-            href="/expiring"
+            href={counts.reminders === 0 && counts.expiring > 0 ? "/expiring" : "/reminders"}
             icon="alarm"
-            label="即将过期"
-            count={counts.expiring}
+            label="到期提醒"
+            count={counts.reminders + counts.expiring}
             warn
-            active={pathname === "/expiring"}
+            active={pathname === "/reminders" || pathname === "/expiring"}
             className={rowH}
           />
           <NavItem
@@ -235,15 +235,6 @@ export function Sidebar({ variant = "sidebar" }: { variant?: "sidebar" | "page" 
             label="摘录"
             count={data?.snippets.length ?? 0}
             active={pathname === "/snippets"}
-            className={rowH}
-          />
-          <NavItem
-            href="/reminders"
-            icon="bell"
-            label="提醒事项"
-            count={counts.reminders}
-            warn
-            active={pathname === "/reminders"}
             className={rowH}
           />
           <NavItem
