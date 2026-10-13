@@ -1,13 +1,18 @@
 services:
   mydoc:
-    build: .
+    build:
+      context: .
+      args:
+        # 国内服务器在 .env 里写 NPM_REGISTRY=https://registry.npmmirror.com 加速
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
     image: mydoc
     container_name: mydoc
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${MYDOC_PORT:-3000}:3000"
     environment:
-      # 登录密码，务必改成你自己的
-      APP_PASSWORD: change-me
+      # 登录密码写在同目录的 .env 文件里：APP_PASSWORD=你的密码（用 deploy.sh 部署时会自动生成）
+      APP_PASSWORD: ${APP_PASSWORD:-change-me}
     volumes:
-      - ./data:/app/data
+      # :z 让开着 SELinux 的系统（CentOS 等）也能写入，其他系统会忽略
+      - ./data:/app/data:z

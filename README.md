@@ -36,24 +36,21 @@
 - 导出 JSON（可恢复）、CSV（Excel 打开）、浏览器书签 HTML
 - 所有数据在一个 SQLite 文件里：`data/mydoc.db`
 
-## 一键部署（Ubuntu / Debian，国内服务器推荐）
+## 一键部署（推荐）
 
-登录服务器后运行：
+支持常见的 Linux 服务器：Ubuntu、Debian、CentOS、Rocky Linux、AlmaLinux、阿里云 Linux、腾讯云 OpenCloudOS 等。登录服务器后运行：
 
 ```bash
-sudo apt-get install -y git
-sudo git clone https://github.com/9862226-ui/MyDoc.git /opt/mydoc
-sudo bash /opt/mydoc/deploy.sh
+sudo bash -c 'set -e; command -v git >/dev/null || { if command -v apt-get >/dev/null; then apt-get update && apt-get install -y git; else yum install -y git; fi; }; [ -d /opt/mydoc ] || git clone https://github.com/9862226-ui/MyDoc.git /opt/mydoc; bash /opt/mydoc/deploy.sh'
 ```
 
 按提示设置登录密码，完成后访问 `http://服务器IP:3000`。云服务器还要在控制台的「安全组」里放行 TCP 3000 端口。
 
 脚本会自动完成：
 
-- 从国内镜像安装 Node.js 22 和依赖（不需要 Docker，也不用访问 Docker Hub）
-- 构建并注册成系统服务 `mydoc`，开机自启、出错自动重启
-- 内存小于 2G 时自动添加交换空间，避免构建时内存不够
-- 本机开了 ufw 防火墙时自动放行端口
+- 按系统选择运行方式：较新的系统（Ubuntu 22.04+、Debian 12+、Rocky / AlmaLinux 9 等）直接安装 Node.js 22，注册成系统服务 `mydoc`；较老的系统（CentOS 7、阿里云 Linux 2/3、Ubuntu 20.04 等）安装 Docker，在容器里运行
+- 默认使用国内镜像（npmmirror、阿里云 Docker 源、Docker 镜像加速），国外服务器加 `--overseas`
+- 开机自启、出错自动重启；内存小于 2G 时自动添加交换空间；本机开了 ufw / firewalld 防火墙时自动放行端口
 
 数据在 `/opt/mydoc/data`，密码和端口在 `/etc/mydoc/mydoc.env`。
 
@@ -62,34 +59,30 @@ sudo bash /opt/mydoc/deploy.sh
 | 更新到最新版本 | `sudo bash /opt/mydoc/deploy.sh` |
 | 修改登录密码 | `sudo bash /opt/mydoc/deploy.sh --reset-password` |
 | 换端口（第一次部署时） | `sudo bash /opt/mydoc/deploy.sh --port 8080` |
+| 强制用 Docker 运行 | `sudo bash /opt/mydoc/deploy.sh --docker` |
 | 服务器在国外 | 加上 `--overseas`，使用官方源 |
-| 查看状态 / 日志 | `systemctl status mydoc` / `journalctl -u mydoc -f` |
+| 查看状态 / 日志（直接运行） | `systemctl status mydoc` / `journalctl -u mydoc -f` |
+| 查看状态 / 日志（Docker） | `sudo docker ps` / `sudo docker logs -f mydoc` |
 
-服务器连不上 GitHub 时：在电脑上从 GitHub 下载 ZIP，解压后上传到服务器的 `/opt/mydoc`，再运行 `sudo bash /opt/mydoc/deploy.sh --no-pull`。
+常见问题：
 
-## Docker 部署
+- **连不上 GitHub**：在电脑上从 GitHub 下载 ZIP，解压后上传到服务器的 `/opt/mydoc`，再运行 `sudo bash /opt/mydoc/deploy.sh --no-pull`
+- **Docker 镜像下载失败**：在阿里云「容器镜像服务 → 镜像工具 → 镜像加速器」里复制专属加速地址，运行 `sudo DOCKER_MIRRORS=你的加速地址 bash /opt/mydoc/deploy.sh`
 
-国内服务器拉取 Docker Hub 镜像经常失败，建议用上面的一键部署。服务器上需要安装 Docker 和 Docker Compose。
+## 手动用 Docker 部署
+
+服务器上需要安装 Docker 和 Docker Compose。
 
 ```bash
-git clone <仓库地址> mydoc && cd mydoc
+git clone https://github.com/9862226-ui/MyDoc.git mydoc && cd mydoc
 
-# 修改 docker-compose.yml 里的 APP_PASSWORD 为你的登录密码
-vi docker-compose.yml
+# 在 .env 文件里设置登录密码（国内服务器再加一行 NPM_REGISTRY=https://registry.npmmirror.com）
+echo "APP_PASSWORD=你的密码" > .env
 
 docker compose up -d --build
 ```
 
-然后访问 `http://服务器IP:3000`，用设置的密码登录。数据保存在当前目录的 `data/` 下。
-
-**国内服务器构建慢**：把 `docker-compose.yml` 里的 `build: .` 改成：
-
-```yaml
-    build:
-      context: .
-      args:
-        NPM_REGISTRY: https://registry.npmmirror.com
-```
+然后访问 `http://服务器IP:3000`，用设置的密码登录。数据保存在当前目录的 `data/` 下。端口可以在 `.env` 里用 `MYDOC_PORT=8080` 修改。
 
 **更新版本**：
 
