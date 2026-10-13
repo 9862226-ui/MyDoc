@@ -1,7 +1,9 @@
 "use client";
 
 import { Bell, CalendarClock, ExternalLink, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
+import NextLink from "next/link";
 import { useState, type ReactNode } from "react";
+import useSWR from "swr";
 import { api, refreshData, useAppData } from "@/lib/client";
 import { shortDate } from "@/lib/format";
 import {
@@ -13,6 +15,7 @@ import {
   sortReminders,
   type ReminderLevel,
 } from "@/lib/reminders";
+import type { NotifyConfig } from "@/lib/notify";
 import type { Reminder, RepeatKind } from "@/lib/types";
 import {
   Button,
@@ -281,6 +284,7 @@ export function RemindersView() {
 
 function Page({ count, children }: { count?: number; children: ReactNode }) {
   const ui = useUI();
+  const { data: notify } = useSWR("/api/settings/notify", (url: string) => api<{ config: NotifyConfig }>(url));
   return (
     <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-6 px-4 pt-4 pb-12 md:px-8 md:pt-6">
       <div className="flex items-start gap-4">
@@ -292,7 +296,17 @@ function Page({ count, children }: { count?: number; children: ReactNode }) {
         </span>
         <div className="min-w-0 flex-1">
           <h1 className="hidden text-xl leading-7 font-semibold md:block">提醒事项</h1>
-          <p className="mt-0.5 text-[13px] text-muted">账号、域名、会员的到期时间{count ? ` · ${count} 个` : ""}</p>
+          <p className="mt-0.5 text-[13px] text-muted">
+            账号、域名、会员的到期时间{count ? ` · ${count} 个` : ""}
+            {notify && !notify.config.enabled && (
+              <>
+                {" · "}
+                <NextLink href="/settings#notify" className="text-accent-text hover:underline">
+                  开启微信 / 钉钉推送
+                </NextLink>
+              </>
+            )}
+          </p>
         </div>
         <Button variant="primary" className="hidden md:inline-flex" onClick={() => ui.editReminder()}>
           <Plus size={16} />

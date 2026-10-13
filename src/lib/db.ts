@@ -88,6 +88,12 @@ const MIGRATIONS: string[] = [
     last_used_at TEXT
   );
   `,
+  `
+  CREATE TABLE settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+  `,
 ];
 
 export function migrate(db: DB): void {

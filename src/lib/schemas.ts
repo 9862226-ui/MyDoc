@@ -186,3 +186,31 @@ export const backupSchema = z.object({
   inbox: z.array(backupLink).default([]),
   reminders: z.array(backupReminder).default([]),
 });
+
+export const notifyConfigSchema = z.object({
+  enabled: z.boolean(),
+  channel: z.enum(["wecom", "dingtalk", "feishu", "serverchan", "bark", "webhook"]),
+  target: z.string().trim().max(2000, "地址太长了"),
+  secret: z.string().trim().max(500),
+  hour: z.number().int().min(0).max(23),
+  timeZone: z.string().max(64),
+  includeLinks: z.boolean(),
+  siteUrl: z.string().max(500),
+});
+
+export const syncConfigSchema = z.object({
+  enabled: z.boolean(),
+  type: z.enum(["webdav", "s3"]),
+  webdavUrl: z.string().trim().max(1000),
+  webdavUser: z.string().trim().max(200),
+  webdavPassword: z.string().max(500),
+  s3Provider: z.enum(["oss", "cos", "other"]),
+  s3Endpoint: z.string().trim().max(500),
+  s3Region: z.string().trim().max(100),
+  s3Bucket: z.string().trim().max(200),
+  s3AccessKey: z.string().trim().max(200),
+  s3SecretKey: z.string().max(500),
+  s3Prefix: z.string().trim().max(200),
+  s3PathStyle: z.boolean(),
+  keep: z.number().int().min(1).max(365),
+});

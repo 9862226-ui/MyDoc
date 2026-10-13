@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { dataDir, getDb, type DB } from "./db";
+import { dataDir, type DB } from "./db";
 import { localDate } from "./format";
 
 /** 自动备份保留的份数 */
@@ -63,18 +63,4 @@ export async function ensureDailyBackup(db: DB, dir = backupDir(), now = new Dat
   if (listBackups(dir).some((b) => b.name.startsWith(`mydoc-${today}-`))) return false;
   await createBackup(db, dir, now);
   return true;
-}
-
-const globalForBackup = globalThis as unknown as { __mydocBackupStarted?: boolean };
-
-/** 服务启动后定时检查：每天自动备份一次 */
-export function startBackupSchedule(): void {
-  if (globalForBackup.__mydocBackupStarted) return;
-  globalForBackup.__mydocBackupStarted = true;
-  const run = () =>
-    ensureDailyBackup(getDb())
-      .then((created) => created && console.log("[MyDoc] 已自动备份数据库"))
-      .catch((e) => console.error("[MyDoc] 自动备份失败", e));
-  setTimeout(run, 30_000).unref();
-  setInterval(run, 3600_000).unref();
 }

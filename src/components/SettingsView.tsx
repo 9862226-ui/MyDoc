@@ -2,19 +2,22 @@
 
 import { Bookmark, Copy, Info } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import useSWR from "swr";
 import { api, copyText, refreshData, useAppData } from "@/lib/client";
 import type { Tag } from "@/lib/types";
+import { AutoBackupCard, BackupSyncCard } from "./BackupSettings";
 import { ShortcutList } from "./HelpDialog";
 import { McpSection } from "./McpSettings";
+import { NotifySection } from "./NotifySettings";
 import { Card, Row } from "./settings-ui";
 import { Button, cx, Input, Kbd, useModKey } from "./ui";
 import { useUI } from "./ui-context";
 
-type Section = "data" | "bookmarklet" | "mcp" | "tags" | "keys" | "account";
+type Section = "data" | "backup" | "notify" | "bookmarklet" | "mcp" | "tags" | "keys" | "account";
 
 const SECTIONS: [Section, string][] = [
   ["data", "导入与导出"],
+  ["backup", "备份"],
+  ["notify", "提醒推送"],
   ["bookmarklet", "收藏按钮"],
   ["mcp", "AI 助手（MCP）"],
   ["tags", "标签管理"],
@@ -69,6 +72,13 @@ export function SettingsView() {
         </nav>
         <div className="flex min-w-0 flex-1 flex-col gap-4">
           {section === "data" && <DataSection />}
+          {section === "backup" && (
+            <>
+              <AutoBackupCard />
+              <BackupSyncCard />
+            </>
+          )}
+          {section === "notify" && <NotifySection />}
           {section === "bookmarklet" && <BookmarkletSection />}
           {section === "mcp" && <McpSection />}
           {section === "tags" && <TagsSection />}
@@ -157,7 +167,6 @@ function DataSection() {
           />
         </Row>
       </Card>
-      <AutoBackupCard />
       <section className="flex items-start gap-2.5 rounded-lg bg-surface px-5 py-4 text-[13px] text-muted md:px-6">
         <Info size={16} className="mt-[3px] shrink-0 text-icon" />
         <span>
@@ -167,85 +176,6 @@ function DataSection() {
         </span>
       </section>
     </>
-  );
-}
-
-interface BackupFile {
-  name: string;
-  size: number;
-  createdAt: string;
-}
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function AutoBackupCard() {
-  const ui = useUI();
-  const { data, mutate } = useSWR("/api/backups", (url: string) => api<{ backups: BackupFile[]; keep: number }>(url));
-  const [busy, setBusy] = useState(false);
-
-  const backupNow = async () => {
-    setBusy(true);
-    try {
-      await api("/api/backups", { method: "POST" });
-      await mutate();
-      ui.toast("已备份");
-    } catch (e) {
-      ui.toast((e as Error).message, { kind: "error" });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Card
-      title="自动备份"
-      description={`每天自动备份一次完整数据库，保留最近 ${data?.keep ?? 7} 份，存放在服务器的 data/backups 目录`}
-    >
-      {!data ? (
-        <div className="skeleton my-3 h-10 rounded-md" />
-      ) : data.backups.length === 0 ? (
-        <p className="py-4 text-[13px] text-faint">还没有备份。服务启动后会自动备份一次，也可以现在手动备份。</p>
-      ) : (
-        <ul>
-          {data.backups.map((b) => (
-            <li key={b.name} className="flex items-center gap-4 border-b border-line-soft py-2.5 last:border-b-0">
-              <span className="min-w-0 flex-1 tabular-nums">{formatTime(b.createdAt)}</span>
-              <span className="text-[13px] text-faint tabular-nums">{formatSize(b.size)}</span>
-              <a href={`/api/backups/${b.name}`} download className="text-accent-text hover:underline">
-                下载
-              </a>
-            </li>
-          ))}
-        </ul>
-      )}
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-        <Button loading={busy} onClick={() => void backupNow()}>
-          立即备份
-        </Button>
-        <details className="text-[13px] text-muted">
-          <summary className="cursor-pointer text-accent-text">怎么用备份文件恢复？</summary>
-          <ol className="mt-2 list-decimal space-y-1 pl-5">
-            <li>停止 MyDoc 服务</li>
-            <li>
-              用备份文件替换 <code className="rounded bg-field px-1 font-mono">data/mydoc.db</code>，并删除同目录下的{" "}
-              <code className="rounded bg-field px-1 font-mono">mydoc.db-wal</code> 和{" "}
-              <code className="rounded bg-field px-1 font-mono">mydoc.db-shm</code>
-            </li>
-            <li>重新启动服务</li>
-          </ol>
-        </details>
-      </div>
-    </Card>
   );
 }
 
