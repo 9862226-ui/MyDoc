@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseShareText } from "./share-text";
+import { parseSharedContent, parseShareText } from "./share-text";
 
 describe("parseShareText", () => {
   it("百度网盘旧版分享文案", () => {
@@ -59,5 +59,47 @@ describe("parseShareText", () => {
 
   it("没有链接时返回空", () => {
     expect(parseShareText("随便一段文字\n提取码: abcd")).toEqual([]);
+  });
+});
+
+describe("parseSharedContent", () => {
+  it("安卓分享：链接在 url 里", () => {
+    expect(parseSharedContent({ url: "https://a.feishu.cn/docx/1", title: "需求文档" })).toEqual({
+      url: "https://a.feishu.cn/docx/1",
+      title: "需求文档",
+      accessCode: "",
+      note: "",
+    });
+  });
+
+  it("标题和链接整段放在 text 里", () => {
+    expect(parseSharedContent({ text: "【腾讯文档】周会纪要 2026\nhttps://docs.qq.com/doc/DAbc" })).toMatchObject({
+      url: "https://docs.qq.com/doc/DAbc",
+      title: "周会纪要 2026",
+      note: "",
+    });
+  });
+
+  it("网盘分享文案：拆出提取码，广告语不进备注", () => {
+    const r = parseSharedContent({
+      text: "通过百度网盘分享的文件：设计素材包\n链接：https://pan.baidu.com/s/1Abc 提取码：k3m9\n--来自百度网盘超级会员v5的分享",
+    });
+    expect(r).toEqual({ url: "https://pan.baidu.com/s/1Abc", title: "设计素材包", accessCode: "k3m9", note: "" });
+  });
+
+  it("分享网页里选中的一段话：多出来的文字作为备注", () => {
+    const r = parseSharedContent({ title: "如何写好周报", text: "“先写结论，再写过程。”\nhttps://example.com/weekly" });
+    expect(r).toMatchObject({
+      url: "https://example.com/weekly",
+      title: "如何写好周报",
+      note: "“先写结论，再写过程。”",
+    });
+  });
+
+  it("没有链接时只返回文字", () => {
+    expect(parseSharedContent({ text: "下周三前把报价发给客户A" })).toMatchObject({
+      url: "",
+      note: "下周三前把报价发给客户A",
+    });
   });
 });

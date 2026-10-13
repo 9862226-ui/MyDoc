@@ -6,7 +6,17 @@ import { useRef, useState } from "react";
 import { LinkDialog } from "./LinkDialog";
 
 /** 从浏览器收藏按钮打开时：保存或取消后，弹出的小窗口自动关闭；在普通标签页里则回到工作台 */
-export function QuickAdd({ url, title, note }: { url: string; title: string; note: string }) {
+export function QuickAdd({
+  url,
+  title,
+  note,
+  accessCode = "",
+}: {
+  url: string;
+  title: string;
+  note: string;
+  accessCode?: string;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(true);
   const [saved, setSaved] = useState(false);
@@ -37,7 +47,7 @@ export function QuickAdd({ url, title, note }: { url: string; title: string; not
       )}
       <LinkDialog
         open={open}
-        init={{ url, title, note }}
+        init={{ url, title, note, accessCode }}
         onSaved={() => {
           savedRef.current = true;
           setSaved(true);

@@ -26,6 +26,8 @@ ENV NODE_ENV=production \
     DATA_DIR=/app/data
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
+# 图标、Service Worker 等静态文件（standalone 输出不会自动带上 public 目录）
+COPY --from=build /app/public ./public
 COPY docker-entrypoint.sh /usr/local/bin/mydoc-entrypoint
 RUN chmod +x /usr/local/bin/mydoc-entrypoint && mkdir -p /app/data
 VOLUME /app/data

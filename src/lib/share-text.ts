@@ -116,3 +116,34 @@ export function parseShareText(text: string): LinkDraft[] {
 export function containsUrl(text: string): boolean {
   return extractUrls(text).length > 0;
 }
+
+export interface SharedContent {
+  url: string;
+  title: string;
+  accessCode: string;
+  /** 分享内容里除了链接、标题、提取码以外的文字 */
+  note: string;
+}
+
+/**
+ * 手机「分享」过来的内容：不同 App 放的位置不一样，有的放在 url，有的把「标题 + 链接」整段放在 text。
+ * 拆出链接、标题、提取码，剩下的文字作为备注。
+ */
+export function parseSharedContent(input: { url?: string; title?: string; text?: string }): SharedContent {
+  const text = (input.text ?? "").trim();
+  const draft = parseShareText([input.url ?? "", text].filter(Boolean).join("\n"))[0];
+  const url = draft?.url ?? "";
+  const title = (input.title ?? "").trim() || draft?.title || "";
+  const accessCode = draft?.accessCode ?? "";
+  let rest = text;
+  for (const u of extractUrls(text)) rest = rest.split(u).join(" ");
+  rest = rest
+    .replace(new RegExp(CODE_RE.source, "gi"), " ")
+    .replace(LABEL_RE, " ")
+    .split(/\r?\n/)
+    .map((l) => l.replace(/\s+/g, " ").trim())
+    .filter((l) => l && !NOISE_RE.test(l) && l !== title && extractTitle(l) !== title)
+    .join("\n")
+    .trim();
+  return { url, title, accessCode, note: rest.slice(0, 2000) };
+}

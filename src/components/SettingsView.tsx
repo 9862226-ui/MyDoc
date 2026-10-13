@@ -22,7 +22,7 @@ const SECTIONS: [Section, string][] = [
   ["notify", "提醒推送"],
   ["shares", "分享链接"],
   ["ai", "AI 模型"],
-  ["bookmarklet", "浏览器"],
+  ["bookmarklet", "浏览器与手机"],
   ["mcp", "AI 助手（MCP）"],
   ["tags", "标签管理"],
   ["keys", "快捷键"],
@@ -88,6 +88,7 @@ export function SettingsView() {
           {section === "bookmarklet" && (
             <>
               <BookmarkletSection />
+              <MobileShareCard />
               <SearchEngineCard />
             </>
           )}
@@ -334,6 +335,59 @@ export function bookmarkletCode(origin: string): string {
     "+'&note='+encodeURIComponent(String(window.getSelection()||'').slice(0,500));" +
     "var w=window.open(u,'mydoc','width=640,height=800,resizable=yes,scrollbars=yes');" +
     "if(!w)location.href=u;})();"
+  );
+}
+
+/** 手机上收藏：安卓安装后出现在分享菜单；iPhone 用快捷指令 */
+function MobileShareCard() {
+  const ui = useUI();
+  const [origin, setOrigin] = useState("");
+  useEffect(() => setOrigin(window.location.origin), []);
+  const shortcutUrl = `${origin}/add?text=`;
+  return (
+    <Card
+      title="在手机上收藏"
+      description="在微信、浏览器、飞书等 App 里点「分享」，就能把链接收进 MyDoc，标题、提取码会自动识别。"
+    >
+      <div className="flex flex-col gap-4 py-3 text-muted">
+        <div>
+          <div className="mb-1 font-medium text-fg">安卓手机</div>
+          <ol className="flex list-decimal flex-col gap-1 pl-5">
+            <li>用 Chrome 或 Edge 打开 MyDoc 并登录</li>
+            <li>点浏览器菜单里的「安装应用」或「添加到主屏幕」</li>
+            <li>以后在任意 App 里点「分享」，选 MyDoc 即可</li>
+          </ol>
+          <p className="mt-1 text-[13px] text-faint">
+            需要用 HTTPS 访问 MyDoc 才能安装。微信里的文章先点右上角「…」›「在浏览器打开」，再分享。
+          </p>
+        </div>
+        <div>
+          <div className="mb-1 font-medium text-fg">iPhone</div>
+          <ol className="flex list-decimal flex-col gap-1 pl-5">
+            <li>打开「快捷指令」App，点右上角「+」新建快捷指令，命名为「收藏到 MyDoc」</li>
+            <li>点底部的「ⓘ」，打开「在共享表单中显示」，接收类型只勾选「URL」和「文本」</li>
+            <li>添加操作「URL 编码」，编码的内容选「快捷指令输入」</li>
+            <li>添加操作「打开 URL」，网址先粘贴下面复制的地址，再在后面插入变量「URL 编码后的文本」</li>
+            <li>以后在 Safari、微信等 App 里点「分享」，选「收藏到 MyDoc」即可</li>
+          </ol>
+        </div>
+      </div>
+      <Row
+        title="快捷指令要打开的地址"
+        description={<code className="font-mono break-all text-muted">{shortcutUrl}</code>}
+      >
+        <Button
+          disabled={!origin}
+          onClick={async () => {
+            const ok = await copyText(shortcutUrl);
+            ui.toast(ok ? "已复制" : "复制失败", { kind: ok ? "ok" : "error" });
+          }}
+        >
+          <Copy size={15} />
+          复制地址
+        </Button>
+      </Row>
+    </Card>
   );
 }
 
