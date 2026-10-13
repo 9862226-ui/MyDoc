@@ -221,7 +221,8 @@ ask_password() {
     done
     NEW_PASSWORD=$p1
   else
-    NEW_PASSWORD=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 16)
+    # 先读固定长度再过滤，避免 pipefail 下 tr 被提前关闭管道而退出
+    NEW_PASSWORD=$(head -c 512 /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9' | cut -c1-16)
     GENERATED_PASSWORD=$NEW_PASSWORD
   fi
   [ ${#NEW_PASSWORD} -ge 6 ] || die "密码太短，至少 6 位"
