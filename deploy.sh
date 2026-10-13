@@ -97,7 +97,7 @@ DOCKER_MIRRORS=${DOCKER_MIRRORS:-$DEFAULT_DOCKER_MIRRORS}
 [ "$(uname -s)" = Linux ] || die "这个脚本只支持 Linux 服务器"
 if [ "$(id -u)" -ne 0 ]; then
   command -v sudo >/dev/null || die "请用 root 用户运行"
-  exec sudo -E bash "$0" "${ORIG_ARGS[@]}"
+  exec sudo -E bash "$0" ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}
 fi
 
 OS_ID="" OS_VERSION="" OS_LIKE="" OS_NAME="Linux" OS_CODENAME="" OS_PLATFORM=""
@@ -224,7 +224,7 @@ if [ ! -f "$APP_DIR/package.json" ]; then
   echo "从 $REPO_URL 下载到 $APP_DIR"
   git clone --depth 1 "$REPO_URL" "$APP_DIR" ||
     die "下载代码失败。可以在电脑上从 GitHub 下载 ZIP，解压后上传到 $APP_DIR，再运行：bash $APP_DIR/deploy.sh --no-pull"
-  exec bash "$APP_DIR/deploy.sh" "${ORIG_ARGS[@]}" --no-pull
+  exec bash "$APP_DIR/deploy.sh" ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"} --no-pull
 elif [ "$PULL" = 1 ] && [ -d "$APP_DIR/.git" ]; then
   OLD_HEAD=$(git_ rev-parse HEAD)
   if git_ pull --ff-only; then
@@ -232,7 +232,7 @@ elif [ "$PULL" = 1 ] && [ -d "$APP_DIR/.git" ]; then
     # 部署脚本本身更新了：用新脚本重新运行
     if ! git_ diff --quiet "$OLD_HEAD" HEAD -- deploy.sh; then
       echo "部署脚本有更新，用新版本继续"
-      exec bash "$APP_DIR/deploy.sh" "${ORIG_ARGS[@]}" --no-pull
+      exec bash "$APP_DIR/deploy.sh" ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"} --no-pull
     fi
   else
     warn "拉取最新代码失败（网络问题或本地有改动），先用当前代码继续部署"
@@ -309,7 +309,7 @@ fi
 SAVED_PASSWORD=$(sed -n "s/^APP_PASSWORD='\(.*\)'$/\1/p" "$ENV_FILE")
 
 # 端口被别的程序占用时的提示
-port_owner() { ss -ltnpH "sport = :$PORT" 2>/dev/null | grep -o 'users:(("[^"]*"' | head -1 | cut -d'"' -f2; }
+port_owner() { ss -ltnp "sport = :$PORT" 2>/dev/null | grep -o 'users:(("[^"]*"' | head -1 | cut -d'"' -f2; }
 HAS_SYSTEMD=0
 [ -d /run/systemd/system ] && HAS_SYSTEMD=1
 
