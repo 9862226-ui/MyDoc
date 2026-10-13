@@ -283,7 +283,12 @@ fi
 ok "依赖安装完成"
 
 step "构建（大约 1~3 分钟）"
-npm run build --silent
+BUILD_LOG=$(mktemp)
+if ! npm run build --silent >"$BUILD_LOG" 2>&1; then
+  tail -40 "$BUILD_LOG"
+  die "构建失败，上面是最后的输出（完整日志：$BUILD_LOG）"
+fi
+rm -f "$BUILD_LOG"
 ok "构建完成"
 
 mkdir -p "$APP_DIR/data"
