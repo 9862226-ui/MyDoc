@@ -1,5 +1,6 @@
 import type { DB } from "./db";
 import { HttpError } from "./errors";
+import { pinyinIndex } from "./pinyin";
 import { importReminders, listReminders, toBackupReminder, type BackupReminder } from "./reminder-repo";
 import type { AppData, Group, Link, Project, Tag } from "./types";
 import { urlKey } from "./url";
@@ -84,6 +85,10 @@ export function getAppData(db: DB): AppData {
   const links = (db.prepare(`${LINK_SELECT} WHERE l.deleted_at IS NULL ORDER BY l.id DESC`).all() as LinkRow[]).map(
     toLink,
   );
+  // 拼音用于搜索，例如输入 pqb 或 paiqi 能找到「排期表」
+  for (const g of groups) g.py = pinyinIndex(g.name);
+  for (const p of projects) p.py = pinyinIndex(p.name);
+  for (const l of links) l.py = pinyinIndex(l.title, ...l.tags);
   return { groups, projects, tags, links, reminders: listReminders(db) };
 }
 

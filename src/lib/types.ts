@@ -2,6 +2,8 @@ export interface Group {
   id: number;
   name: string;
   sort: number;
+  /** 名称的拼音，用于拼音搜索（只在 /api/data 里有） */
+  py?: string;
 }
 
 export interface Project {
@@ -11,6 +13,8 @@ export interface Project {
   description: string;
   archived: boolean;
   sort: number;
+  /** 名称的拼音，用于拼音搜索（只在 /api/data 里有） */
+  py?: string;
 }
 
 export interface Tag {
@@ -36,6 +40,8 @@ export interface Link {
   createdAt: string;
   updatedAt: string;
   tags: string[];
+  /** 标题和标签的拼音，用于拼音搜索（只在 /api/data 里有） */
+  py?: string;
 }
 
 export type RepeatKind = "none" | "monthly" | "yearly";

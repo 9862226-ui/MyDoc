@@ -156,7 +156,7 @@ export const TOOLS: Tool[] = [
     name: "search_links",
     title: "搜索链接",
     description:
-      "在 MyDoc 收藏的链接里搜索（标题、网址、备注、标签、项目名、平台名都会匹配，多个关键词用空格分开）。" +
+      "在 MyDoc 收藏的链接里搜索（标题、网址、备注、标签、项目名、平台名都会匹配，也支持拼音和首字母，多个关键词用空格分开）。" +
       "不填 query 时按最近更新列出。返回链接的 id、标题、网址、所在项目、提取码等。",
     input: z.object({
       query: z.string().optional().describe("搜索关键词，例如「排期 飞书」"),

@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAppData } from "@/lib/client";
 import { platformLabel } from "@/lib/platforms";
 import type { Link } from "@/lib/types";
-import { projectIndex, projectPathLabel, search, type ProjectInfo } from "@/lib/view";
+import { pinyinHits, projectIndex, projectPathLabel, search, type ProjectInfo } from "@/lib/view";
 import { cx, DocIcon, Kbd, ProjectBadge, useModKey } from "./ui";
 import { useLinkActions } from "./ui-context";
 
@@ -47,20 +47,31 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** 把匹配到的关键字标成主色 */
-function highlight(text: string, query: string): ReactNode {
-  const terms = query.trim().split(/\s+/).filter(Boolean);
+/** 把匹配到的关键字标成主色；用拼音对上的字也标出来（py 是 text 的拼音） */
+function highlight(text: string, query: string, py?: string): ReactNode {
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (!terms.length) return text;
-  const re = new RegExp(`(${terms.map(escapeRegExp).join("|")})`, "gi");
-  return text.split(re).map((part, i) =>
-    i % 2 === 1 ? (
-      <mark key={i} className="bg-transparent font-medium text-accent-text">
-        {part}
-      </mark>
-    ) : (
-      part
-    ),
-  );
+  const marked = pinyinHits(text, py, terms);
+  const re = new RegExp(terms.map(escapeRegExp).join("|"), "gi");
+  for (const m of text.matchAll(re)) for (let i = m.index; i < m.index + m[0].length; i++) marked.add(i);
+  const parts: ReactNode[] = [];
+  let i = 0;
+  while (i < text.length) {
+    let j = i;
+    while (j < text.length && marked.has(j) === marked.has(i)) j++;
+    const part = text.slice(i, j);
+    parts.push(
+      marked.has(i) ? (
+        <mark key={i} className="bg-transparent font-medium text-accent-text">
+          {part}
+        </mark>
+      ) : (
+        part
+      ),
+    );
+    i = j;
+  }
+  return parts;
 }
 
 function PaletteBody({ onClose }: { onClose: () => void }) {
@@ -225,7 +236,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
                       <>
                         <DocIcon url={item.link.url} size={32} />
                         <span className="flex min-w-0 flex-1 flex-col">
-                          <span className="truncate">{highlight(item.link.title, query)}</span>
+                          <span className="truncate">{highlight(item.link.title, query, item.link.py)}</span>
                           <span className="truncate text-xs leading-5 text-faint">
                             {projectPathLabel(
                               item.link.projectId === null ? undefined : index.get(item.link.projectId),
@@ -244,7 +255,9 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
                       <>
                         <ProjectBadge project={item.info.project} size={32} />
                         <span className="flex min-w-0 flex-1 flex-col">
-                          <span className="truncate">{highlight(item.info.project.name, query)}</span>
+                          <span className="truncate">
+                            {highlight(item.info.project.name, query, item.info.project.py)}
+                          </span>
                           <span className="truncate text-xs leading-5 text-faint">
                             {[
                               item.info.group?.name,
