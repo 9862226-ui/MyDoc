@@ -308,6 +308,7 @@ export function Field({
   label,
   hint,
   error,
+  below,
   children,
   className,
   as = "label",
@@ -316,6 +317,8 @@ export function Field({
   label: ReactNode;
   hint?: ReactNode;
   error?: string;
+  /** 输入框下方的其他提示（不算进标签名） */
+  below?: ReactNode;
   children: ReactNode;
   className?: string;
   /** 内容不是单个输入框时（例如一组按钮）用 div */
@@ -324,19 +327,23 @@ export function Field({
   extra?: ReactNode;
 }) {
   const Tag = as;
+  // 提示文字放在 <label> 外面，读屏时不会被当成输入框名称的一部分
   return (
-    <Tag className={cx("flex flex-col gap-1.5", className)}>
-      <span className="flex items-center justify-between gap-2 font-medium">
-        {label}
-        {extra}
-      </span>
-      {children}
+    <div className={cx("flex flex-col gap-1.5", className)}>
+      <Tag className="flex flex-col gap-1.5">
+        <span className="flex items-center justify-between gap-2 font-medium">
+          {label}
+          {extra}
+        </span>
+        {children}
+      </Tag>
       {error ? (
         <span className="text-xs text-danger-text">{error}</span>
       ) : hint ? (
         <span className="text-xs text-faint">{hint}</span>
       ) : null}
-    </Tag>
+      {below}
+    </div>
   );
 }
 

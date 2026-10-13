@@ -217,6 +217,16 @@ function LinkForm({ link, init, onDone }: { link?: Link; init?: LinkInit; onDone
         label="链接"
         error={url && !normalized ? "链接格式不正确，需要以 http:// 或 https:// 开头" : undefined}
         hint={!url ? "也可以直接粘贴整段分享文案，会自动识别链接、标题和提取码" : undefined}
+        below={
+          duplicate && (
+            <span className="flex items-start gap-1.5 text-[13px] text-warn-text">
+              <CircleAlert size={14} className="mt-[3px] shrink-0 text-warn" />
+              {link
+                ? `「${duplicate.link.title}」也是这个地址，在「${duplicate.where}」里`
+                : `这个链接已经在「${duplicate.where}」里了（${duplicate.link.title}），仍然可以保存一份`}
+            </span>
+          )
+        }
       >
         <span
           className={cx(
@@ -239,14 +249,6 @@ function LinkForm({ link, init, onDone }: { link?: Link; init?: LinkInit; onDone
           />
           {normalized && <Tag className="max-w-[45%] truncate">{platformLabel(normalized)}</Tag>}
         </span>
-        {duplicate && (
-          <span className="flex items-start gap-1.5 text-[13px] text-warn-text">
-            <CircleAlert size={14} className="mt-[3px] shrink-0 text-warn" />
-            {link
-              ? `「${duplicate.link.title}」也是这个地址，在「${duplicate.where}」里`
-              : `这个链接已经在「${duplicate.where}」里了（${duplicate.link.title}），仍然可以保存一份`}
-          </span>
-        )}
       </Field>
 
       <Field
