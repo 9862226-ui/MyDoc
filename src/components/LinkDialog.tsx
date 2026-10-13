@@ -182,10 +182,12 @@ function LinkForm({
       pinned,
     };
     try {
-      if (link) await api(`/api/links/${link.id}`, { method: "PATCH", body });
-      else await api("/api/links", { body });
+      const saved = link
+        ? await api<Link>(`/api/links/${link.id}`, { method: "PATCH", body })
+        : await api<Link>("/api/links", { body });
       await refreshData();
       ui.toast(link ? "已保存" : "已添加");
+      if (!link) ui.linkAdded(saved);
       onSaved?.();
       onDone();
     } catch (e) {

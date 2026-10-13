@@ -2,9 +2,11 @@
 
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { refreshData } from "@/lib/client";
 import { parseShareText } from "@/lib/share-text";
 import type { Group, Link, Project, Reminder } from "@/lib/types";
 import { CommandPalette } from "./CommandPalette";
+import { AiOrganizeDialog, autoClassify, useAiSettings } from "./AiOrganize";
 import { AddTagsDialog, ConfirmDialog, GroupDialog, ProjectDialog } from "./dialogs";
 import { HelpDialog } from "./HelpDialog";
 import { ImportDialog } from "./ImportDialog";
@@ -43,6 +45,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   });
   const [reminderDialog, setReminderDialog] = useState<{ open: boolean; reminder?: Reminder }>({ open: false });
   const [shareTarget, setShareTarget] = useState<Project | null>(null);
+  const [aiIds, setAiIds] = useState<number[] | null>(null);
+  const { data: ai } = useAiSettings();
+  const aiRef = useRef(ai);
+  aiRef.current = ai;
+  const uiRef = useRef<UI | null>(null);
   const [tagTarget, setTagTarget] = useState<{ ids: number[]; done?: () => void } | null>(null);
   const [confirmState, setConfirmState] = useState<{ options: ConfirmOptions; resolve: (ok: boolean) => void } | null>(
     null,
@@ -71,12 +78,19 @@ export function AppShell({ children }: { children: ReactNode }) {
       addTagsTo: (ids, done) => setTagTarget({ ids, done }),
       editReminder: (reminder) => setReminderDialog({ open: true, reminder }),
       shareProject: (project) => setShareTarget(project),
+      organizeWithAi: (ids) => setAiIds(ids),
+      linkAdded: (link) => {
+        const s = aiRef.current;
+        if (link.projectId !== null || !s?.ready || !s.config.autoClassify) return;
+        void refreshData().then((data) => data && uiRef.current && autoClassify(uiRef.current, data, link.id));
+      },
       confirm: (options) => new Promise<boolean>((resolve) => setConfirmState({ options, resolve })),
       toast,
       defaultProjectId,
     }),
     [toast, defaultProjectId],
   );
+  uiRef.current = ui;
 
   // 快捷键：Ctrl/⌘+K 或 / 搜索，N 添加链接
   useEffect(() => {
@@ -159,6 +173,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         onClose={() => setReminderDialog({ open: false })}
       />
       <ShareDialog project={shareTarget} onClose={() => setShareTarget(null)} />
+      <AiOrganizeDialog ids={aiIds} onClose={() => setAiIds(null)} />
       <AddTagsDialog ids={tagTarget?.ids ?? null} onDone={tagTarget?.done} onClose={() => setTagTarget(null)} />
       <ConfirmDialog
         options={confirmState?.options ?? null}

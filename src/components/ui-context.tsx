@@ -38,6 +38,10 @@ export interface UI {
   editReminder(reminder?: Reminder): void;
   /** 把项目分享成只读链接 */
   shareProject(project: Project): void;
+  /** 打开「AI 整理」，给这些链接出归类建议 */
+  organizeWithAi(ids: number[]): void;
+  /** 新添加了链接：开启了自动归类时让 AI 归类 */
+  linkAdded(link: Link): void;
   confirm(options: ConfirmOptions): Promise<boolean>;
   toast(message: string, options?: ToastOptions): void;
   /** 当前页面对应的项目，新建链接时默认放进去 */

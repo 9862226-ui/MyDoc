@@ -4,6 +4,7 @@ import { Bookmark, Copy, Info } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api, copyText, refreshData, useAppData } from "@/lib/client";
 import type { Tag } from "@/lib/types";
+import { AiSection } from "./AiSettings";
 import { AutoBackupCard, BackupSyncCard } from "./BackupSettings";
 import { ShortcutList } from "./HelpDialog";
 import { McpSection } from "./McpSettings";
@@ -13,13 +14,14 @@ import { Card, Row } from "./settings-ui";
 import { Button, cx, Input, Kbd, useModKey } from "./ui";
 import { useUI } from "./ui-context";
 
-type Section = "data" | "backup" | "notify" | "shares" | "bookmarklet" | "mcp" | "tags" | "keys" | "account";
+type Section = "data" | "backup" | "notify" | "shares" | "ai" | "bookmarklet" | "mcp" | "tags" | "keys" | "account";
 
 const SECTIONS: [Section, string][] = [
   ["data", "导入与导出"],
   ["backup", "备份"],
   ["notify", "提醒推送"],
   ["shares", "分享链接"],
+  ["ai", "AI 模型"],
   ["bookmarklet", "浏览器"],
   ["mcp", "AI 助手（MCP）"],
   ["tags", "标签管理"],
@@ -82,6 +84,7 @@ export function SettingsView() {
           )}
           {section === "notify" && <NotifySection />}
           {section === "shares" && <SharesSection />}
+          {section === "ai" && <AiSection />}
           {section === "bookmarklet" && (
             <>
               <BookmarkletSection />

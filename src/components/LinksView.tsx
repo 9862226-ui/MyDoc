@@ -15,6 +15,7 @@ import {
   Plus,
   Search,
   Share2,
+  Sparkles,
   Star,
   StarOff,
   Tag as TagIcon,
@@ -402,6 +403,12 @@ export function LinksView({ view }: { view: ViewSpec }) {
           <p className="mt-0.5 text-[13px] text-muted">{header.meta}</p>
         </div>
         <div className="hidden items-center gap-2 md:flex">
+          {view.kind === "inbox" && base.length > 0 && (
+            <Button onClick={() => ui.organizeWithAi(base.slice(0, 50).map((l) => l.id))}>
+              <Sparkles size={15} />
+              AI 整理
+            </Button>
+          )}
           {project && (
             <Button onClick={() => ui.shareProject(project)}>
               <Share2 size={15} />

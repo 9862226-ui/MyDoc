@@ -214,3 +214,12 @@ export const syncConfigSchema = z.object({
   s3PathStyle: z.boolean(),
   keep: z.number().int().min(1).max(365),
 });
+
+export const aiConfigSchema = z.object({
+  provider: z.enum(["deepseek", "qwen", "zhipu", "kimi", "doubao", "siliconflow", "ollama", "custom"]),
+  baseUrl: z.string().trim().max(500),
+  apiKey: z.string().trim().max(500),
+  model: z.string().trim().max(200),
+  autoClassify: z.boolean(),
+  allowNewTags: z.boolean(),
+});
