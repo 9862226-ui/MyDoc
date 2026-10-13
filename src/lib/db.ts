@@ -88,10 +88,14 @@ export function openDb(file: string): DB {
 
 const globalForDb = globalThis as unknown as { __mydocDb?: DB };
 
+/** 数据目录：数据库、备份、网站图标缓存都放在这里 */
+export function dataDir(): string {
+  return process.env.DATA_DIR || path.join(process.cwd(), "data");
+}
+
 export function getDb(): DB {
   if (!globalForDb.__mydocDb) {
-    const dir = process.env.DATA_DIR || path.join(process.cwd(), "data");
-    globalForDb.__mydocDb = openDb(path.join(dir, "mydoc.db"));
+    globalForDb.__mydocDb = openDb(path.join(dataDir(), "mydoc.db"));
   }
   return globalForDb.__mydocDb;
 }

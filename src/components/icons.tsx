@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { initialOf, projectColor } from "@/lib/colors";
 import { DOC_KINDS, docKind, type DocKind } from "@/lib/platforms";
 import { cx } from "./cx";
+import { Favicon } from "./Favicon";
 
 /** 文档类型图标里的白色图形（24×24 画布） */
 const GLYPHS: Record<DocKind, { body: ReactNode; width?: number; scale?: number }> = {
@@ -103,7 +104,7 @@ export function DocIcon({
   const k = kind ?? docKind(url ?? "");
   const glyph = GLYPHS[k];
   const g = Math.round(size * 0.54 * (glyph.scale ?? 1));
-  return (
+  const tile = (
     <span
       aria-hidden
       className={cx("inline-flex shrink-0 items-center justify-center", className)}
@@ -123,6 +124,11 @@ export function DocIcon({
       </svg>
     </span>
   );
+  // 不认识的普通网站：显示网站自己的图标，取不到时用地球图标
+  if (k === "web" && url) {
+    return <Favicon url={url} size={size} radius={radiusFor(size)} fallback={tile} className={className} />;
+  }
+  return tile;
 }
 
 /** 项目徽标：彩色方块 + 项目名第一个字 */

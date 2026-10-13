@@ -33,12 +33,12 @@ async function assertPublicHost(hostname: string): Promise<void> {
   if (addrs.length === 0 || addrs.some(isPrivateAddress)) throw new Error("blocked host");
 }
 
-async function readLimited(res: Response): Promise<Uint8Array> {
+async function readLimited(res: Response, maxBytes = MAX_BYTES): Promise<Uint8Array> {
   const reader = res.body?.getReader();
   if (!reader) return new Uint8Array();
   const chunks: Uint8Array[] = [];
   let size = 0;
-  while (size < MAX_BYTES) {
+  while (size < maxBytes) {
     const { done, value } = await reader.read();
     if (done) break;
     chunks.push(value);
@@ -74,13 +74,26 @@ export function extractTitleFromHtml(html: string): string {
   return decodeEntities(raw).replace(/\s+/g, " ").trim();
 }
 
-/** 获取网页标题；需要登录的页面、内网地址、超时等情况返回空字符串 */
-export async function fetchTitle(rawUrl: string, timeoutMs = 6000): Promise<string> {
+export interface SafeFetchResult {
+  /** 跟随跳转后的最终地址 */
+  url: URL;
+  contentType: string;
+  bytes: Uint8Array;
+}
+
+/**
+ * 由服务器去访问外部网址：只允许 http/https，每次跳转都检查不是内网地址，限制大小和时间。
+ * 失败（包括非 2xx、被拦截、超时）返回 null。
+ */
+export async function safeFetch(
+  rawUrl: string,
+  opts: { accept: string; timeoutMs?: number; maxBytes?: number },
+): Promise<SafeFetchResult | null> {
   try {
     let url = new URL(rawUrl);
-    const signal = AbortSignal.timeout(timeoutMs);
+    const signal = AbortSignal.timeout(opts.timeoutMs ?? 6000);
     for (let i = 0; i <= MAX_REDIRECTS; i++) {
-      if (url.protocol !== "http:" && url.protocol !== "https:") return "";
+      if (url.protocol !== "http:" && url.protocol !== "https:") return null;
       await assertPublicHost(url.hostname);
       const res = await fetch(url, {
         redirect: "manual",
@@ -88,7 +101,7 @@ export async function fetchTitle(rawUrl: string, timeoutMs = 6000): Promise<stri
         headers: {
           "user-agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36",
-          accept: "text/html,application/xhtml+xml",
+          accept: opts.accept,
           "accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
         },
       });
@@ -98,16 +111,26 @@ export async function fetchTitle(rawUrl: string, timeoutMs = 6000): Promise<stri
         url = new URL(location, url);
         continue;
       }
-      const contentType = res.headers.get("content-type") ?? "";
-      if (!res.ok || !contentType.includes("html")) {
+      if (!res.ok) {
         await res.body?.cancel();
-        return "";
+        return null;
       }
-      const html = decodeHtml(await readLimited(res), contentType);
-      return cleanFetchedTitle(extractTitleFromHtml(html), rawUrl);
+      const contentType = res.headers.get("content-type") ?? "";
+      return { url, contentType, bytes: await readLimited(res, opts.maxBytes) };
     }
   } catch {
-    // 网络错误、超时、被拦截的地址都当作没获取到
+    // 网络错误、超时、被拦截的地址都当作失败
   }
-  return "";
+  return null;
+}
+
+export function decodeHtmlBytes(bytes: Uint8Array, contentType: string): string {
+  return decodeHtml(bytes, contentType);
+}
+
+/** 获取网页标题；需要登录的页面、内网地址、超时等情况返回空字符串 */
+export async function fetchTitle(rawUrl: string, timeoutMs = 6000): Promise<string> {
+  const r = await safeFetch(rawUrl, { accept: "text/html,application/xhtml+xml", timeoutMs });
+  if (!r || !r.contentType.includes("html")) return "";
+  return cleanFetchedTitle(extractTitleFromHtml(decodeHtml(r.bytes, r.contentType)), rawUrl);
 }
