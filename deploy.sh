@@ -202,7 +202,8 @@ ask_password() {
   local p1 p2
   if [ -n "${APP_PASSWORD:-}" ]; then
     NEW_PASSWORD=$APP_PASSWORD
-  elif [ -r /dev/tty ]; then
+  elif { : </dev/tty; } 2>/dev/null; then
+    # 能打开终端才提问（通过 ssh 直接执行命令时没有终端，会自动生成密码）
     while true; do
       read -rsp "设置登录密码（至少 6 位）：" p1 </dev/tty
       echo
