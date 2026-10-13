@@ -30,6 +30,7 @@ const SIMPLE_TITLES: Record<string, PageTitle> = {
   "/all": { title: "全部链接", parent: "/projects" },
   "/recent": { title: "最近访问", parent: "/" },
   "/trash": { title: "回收站", parent: "/projects" },
+  "/search": { title: "搜索结果", parent: "/" },
 };
 
 /** 根据地址得到页面标题和路径 */

@@ -16,7 +16,11 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="zh-CN">
-      <body className="min-h-dvh font-sans text-sm antialiased">{children}</body>
+      <body className="min-h-dvh font-sans text-sm antialiased">
+        {/* 让浏览器把 MyDoc 识别为可以在地址栏搜索的网站 */}
+        <link rel="search" type="application/opensearchdescription+xml" title="MyDoc" href="/opensearch.xml" />
+        {children}
+      </body>
     </html>
   );
 }

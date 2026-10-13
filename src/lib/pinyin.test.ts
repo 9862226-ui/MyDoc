@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { openDb } from "./db";
 import { pinyinIndex, syllables } from "./pinyin";
 import * as repo from "./repo";
-import { applyFilters, pinyinHits, pinyinMatch, search } from "./view";
+import { applyFilters, hasFixedOrder, linksForView, pinyinHits, pinyinMatch, search } from "./view";
 
 describe("syllables", () => {
   it("中文转拼音，多音字按词语读", () => {
@@ -64,6 +64,12 @@ describe("拼音搜索", () => {
     expect(titles("gwgb")).toEqual(["排期表"]);
     expect(titles("gwgb pq")).toEqual(["排期表"]);
     expect(search(data, "gwgb").projects.map((i) => i.project.name)).toEqual(["官网改版"]);
+  });
+
+  it("地址栏搜索的结果页按相关程度排序", () => {
+    const view = { kind: "search" as const, q: "zhj" };
+    expect(linksForView(data, view).map((l) => l.title)).toEqual(["周会纪要"]);
+    expect(hasFixedOrder(view)).toBe(true);
   });
 
   it("列表筛选也支持拼音", () => {

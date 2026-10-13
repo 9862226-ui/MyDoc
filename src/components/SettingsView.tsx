@@ -18,7 +18,7 @@ const SECTIONS: [Section, string][] = [
   ["data", "导入与导出"],
   ["backup", "备份"],
   ["notify", "提醒推送"],
-  ["bookmarklet", "收藏按钮"],
+  ["bookmarklet", "浏览器"],
   ["mcp", "AI 助手（MCP）"],
   ["tags", "标签管理"],
   ["keys", "快捷键"],
@@ -79,7 +79,12 @@ export function SettingsView() {
             </>
           )}
           {section === "notify" && <NotifySection />}
-          {section === "bookmarklet" && <BookmarkletSection />}
+          {section === "bookmarklet" && (
+            <>
+              <BookmarkletSection />
+              <SearchEngineCard />
+            </>
+          )}
           {section === "mcp" && <McpSection />}
           {section === "tags" && <TagsSection />}
           {section === "keys" && (
@@ -323,6 +328,49 @@ export function bookmarkletCode(origin: string): string {
     "+'&note='+encodeURIComponent(String(window.getSelection()||'').slice(0,500));" +
     "var w=window.open(u,'mydoc','width=640,height=800,resizable=yes,scrollbars=yes');" +
     "if(!w)location.href=u;})();"
+  );
+}
+
+/** 地址栏搜索：把 MyDoc 加成浏览器的「网站搜索」 */
+function SearchEngineCard() {
+  const ui = useUI();
+  const [url, setUrl] = useState("");
+  useEffect(() => setUrl(`${window.location.origin}/search?q=%s`), []);
+  const copy = async (text: string) => {
+    const ok = await copyText(text);
+    ui.toast(ok ? "已复制" : "复制失败", { kind: ok ? "ok" : "error" });
+  };
+  return (
+    <Card
+      title="在地址栏搜索"
+      description="设置好后，在浏览器地址栏输入 md 加空格再输入关键词（支持拼音首字母），回车就能搜 MyDoc；只有一个结果时直接打开。"
+    >
+      <Row title="搜索网址" description={<code className="font-mono break-all text-muted">{url || " "}</code>}>
+        <Button disabled={!url} onClick={() => void copy(url)}>
+          <Copy size={15} />
+          复制网址
+        </Button>
+      </Row>
+      <div className="flex flex-col gap-4 py-3 text-muted">
+        <div>
+          <div className="mb-1 font-medium text-fg">Chrome、Edge</div>
+          <ol className="flex list-decimal flex-col gap-1 pl-5">
+            <li>
+              打开设置 › 搜索引擎 ›「管理搜索引擎和网站搜索」（Edge 是 设置 › 隐私、搜索和服务 › 地址栏和搜索 ›
+              管理搜索引擎）
+            </li>
+            <li>在「网站搜索」旁边点「添加」：名称填 MyDoc，快捷字词填 md，网址粘贴上面复制的网址</li>
+            <li>
+              以后在地址栏输入 <Kbd>md</Kbd> <Kbd>空格</Kbd> 再输入关键词，例如 md pqb
+            </li>
+          </ol>
+        </div>
+        <div>
+          <div className="mb-1 font-medium text-fg">Firefox</div>
+          <p>新建一个书签，网址粘贴上面复制的网址，「关键词」填 md，用法相同。</p>
+        </div>
+      </div>
+    </Card>
   );
 }
 

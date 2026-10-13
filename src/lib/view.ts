@@ -8,7 +8,8 @@ export type ViewSpec =
   | { kind: "expiring" }
   | { kind: "all" }
   | { kind: "project"; id: number }
-  | { kind: "tag"; name: string };
+  | { kind: "tag"; name: string }
+  | { kind: "search"; q: string };
 
 export type SortKey = "updated" | "created" | "visits" | "visited" | "title";
 
@@ -60,12 +61,14 @@ export function linksForView(data: AppData, view: ViewSpec): Link[] {
       return links.filter((l) => l.projectId === view.id);
     case "tag":
       return links.filter((l) => l.tags.some((t) => t.toLowerCase() === view.name.toLowerCase()));
+    case "search":
+      return search(data, view.q, 500).links;
   }
 }
 
 /** 这个视图本身是否已有固定顺序（不提供排序选项） */
 export function hasFixedOrder(view: ViewSpec): boolean {
-  return view.kind === "recent" || view.kind === "expiring";
+  return view.kind === "recent" || view.kind === "expiring" || view.kind === "search";
 }
 
 /** 置顶的排在前面，其余按 key 排序 */

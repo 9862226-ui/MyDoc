@@ -13,6 +13,7 @@ import {
   List,
   Pencil,
   Plus,
+  Search,
   Star,
   StarOff,
   Tag as TagIcon,
@@ -91,7 +92,7 @@ interface Header {
   meta: string;
   /** 可以在这里添加链接 / 批量导入 */
   canAdd: boolean;
-  empty: { title: string; text: ReactNode; illustration: "links" | "done" };
+  empty: { title: string; text: ReactNode; illustration: "links" | "done" | "search" };
 }
 
 function ViewTile({ color, children }: { color: string; children: ReactNode }) {
@@ -194,6 +195,18 @@ function headerFor(view: ViewSpec, data: AppData, base: Link[]): Header | null {
         meta: `${n} 个链接带有这个标签`,
         canAdd: true,
         empty: { title: "这个标签下没有链接", text: "给链接加上这个标签后会出现在这里", illustration: "links" },
+      };
+    case "search":
+      return {
+        tile: (
+          <ViewTile color="#3370FF">
+            <Search size={22} />
+          </ViewTile>
+        ),
+        title: `搜索「${view.q}」`,
+        meta: n ? `${n} 个结果，按相关程度排序` : "没有找到",
+        canAdd: false,
+        empty: { title: "没有找到相关的链接", text: "换个关键词试试，也可以输入拼音或首字母", illustration: "search" },
       };
     case "project": {
       const info = projectIndex(data).get(view.id);
@@ -321,10 +334,7 @@ export function LinksView({ view }: { view: ViewSpec }) {
   const itemProps = (link: Link) => ({
     link,
     project: showProject
-      ? {
-          id: link.projectId,
-          label: projectPathLabel(link.projectId === null ? undefined : index.get(link.projectId)),
-        }
+      ? { id: link.projectId, label: projectPathLabel(link.projectId === null ? undefined : index.get(link.projectId)) }
       : undefined,
     selected: selected.has(link.id),
     selecting: selected.size > 0,
