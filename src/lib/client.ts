@@ -8,11 +8,17 @@ export const TRASH_KEY = "/api/trash";
 
 export async function api<T = unknown>(url: string, opts: { method?: string; body?: unknown } = {}): Promise<T> {
   const hasBody = opts.body !== undefined;
-  const res = await fetch(url, {
-    method: opts.method ?? (hasBody ? "POST" : "GET"),
-    headers: hasBody ? { "content-type": "application/json" } : undefined,
-    body: hasBody ? JSON.stringify(opts.body) : undefined,
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: opts.method ?? (hasBody ? "POST" : "GET"),
+      headers: hasBody ? { "content-type": "application/json" } : undefined,
+      body: hasBody ? JSON.stringify(opts.body) : undefined,
+    });
+  } catch {
+    // 浏览器只给「Failed to fetch」「Load failed」这类英文，换成看得懂的
+    throw new Error(navigator.onLine === false ? "网络已断开，没有保存成功" : "连不上服务器，没有保存成功，请稍后重试");
+  }
   if (res.status === 401 && !url.startsWith("/api/auth")) {
     window.location.href = "/login";
     throw new Error("未登录或登录已过期");

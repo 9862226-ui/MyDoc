@@ -49,6 +49,7 @@ import {
   type WorkProject,
 } from "@/lib/worklog";
 import { Markdown } from "./Markdown";
+import { DraftBanner, useFormDraft } from "./FormDraft";
 import { clearDraft, MarkdownEditor } from "./MarkdownEditor";
 import { LastResult } from "./settings-ui";
 import {
@@ -168,13 +169,16 @@ export function WorkView() {
     if (readLocal<string>("mydoc.workDailyView", "day") === "list") setDailyView("list");
   }, []);
 
+  /** 执行一个修改并刷新；失败时提示，返回是否成功 */
   const run = async (fn: () => Promise<unknown>) => {
     try {
       await fn();
-      await Promise.all([mutate(), refreshWork()]);
     } catch (e) {
       ui.toast((e as Error).message, { kind: "error" });
+      return false;
     }
+    await Promise.all([mutate(), refreshWork()]);
+    return true;
   };
 
   const openDay = (d: string) => {
@@ -331,14 +335,7 @@ export function WorkView() {
                 date={date}
                 focusKey={captureKey}
                 prefill={prefill}
-                onAdd={async (body) => {
-                  let ok = false;
-                  await run(async () => {
-                    await api("/api/work/logs", { body });
-                    ok = true;
-                  });
-                  return ok;
-                }}
+                onAdd={(body) => run(() => api("/api/work/logs", { body }))}
                 onManageProjects={() => setProjectsOpen(true)}
               />
               <LogList
@@ -423,6 +420,16 @@ function Composer({
   const [projectId, setProjectId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const projects = data.projects.filter((p) => !p.archived);
+  // 没加上的内容暂存在浏览器里（网络断了、页面关了都不丢），加上以后清掉
+  const draft = useFormDraft(
+    "work-composer",
+    { text, detail },
+    (v) => {
+      setText(v.text);
+      setDetail(v.detail);
+    },
+    (v) => !v.text.trim() && !v.detail.trim(),
+  );
 
   useEffect(() => {
     setPeriod(currentPeriod());
@@ -468,6 +475,7 @@ function Composer({
       if (!(await onAdd({ date, period, projectId: current, contents: entries, detail }))) return;
       setText("");
       setDetail("");
+      draft.clear();
       clearDraft(DETAIL_DRAFT);
       titleRef.current?.focus();
     } finally {
@@ -477,6 +485,7 @@ function Composer({
 
   return (
     <section aria-label="记一笔" className="rounded-xl border border-line bg-surface px-4 pt-3.5 pb-3">
+      <DraftBanner draft={draft} className="mb-2.5" />
       <Textarea
         id="work-input"
         ref={titleRef}
@@ -500,7 +509,6 @@ function Composer({
         value={detail}
         onChange={setDetail}
         onSubmit={() => void submit()}
-        draft={DETAIL_DRAFT}
         aria-label="明细"
         placeholder={
           "补充明细（可选）：过程、原因、改了哪些地方、链接…\n只留在这条记录里，不进日报。支持列表、待办，Ctrl + 回车添加"
@@ -584,7 +592,7 @@ function LogList({
   data: WorkData;
   kind: Kind;
   date: string;
-  run: (fn: () => Promise<unknown>) => Promise<void>;
+  run: (fn: () => Promise<unknown>) => Promise<boolean>;
   mutate: () => Promise<unknown>;
   /** 从引用跳过来时，高亮这一条 */
   highlight?: number | null;
@@ -686,7 +694,7 @@ function LogRow({
   showPeriod: boolean;
   highlight: boolean;
   onContinue: () => void;
-  onPatch: (patch: Partial<WorkLog>) => Promise<void>;
+  onPatch: (patch: Partial<WorkLog>) => Promise<boolean>;
   onDelete: () => void;
 }) {
   const project = projects.find((p) => p.id === log.projectId);
@@ -792,8 +800,10 @@ function LogRow({
         projects={projects}
         onClose={() => setDialog(false)}
         onSave={async (patch) => {
-          setDialog(false);
-          if (Object.keys(patch).length) await onPatch(patch);
+          // 保存成功才关掉；失败时留着弹窗，内容也暂存在浏览器里
+          const ok = !Object.keys(patch).length || (await onPatch(patch));
+          if (ok) setDialog(false);
+          return ok;
         }}
       />
     </li>
@@ -854,26 +864,34 @@ function LogEditDialog({
   log: WorkLog;
   projects: WorkProject[];
   onClose: () => void;
-  onSave: (patch: Partial<WorkLog>) => Promise<void>;
+  onSave: (patch: Partial<WorkLog>) => Promise<boolean>;
 }) {
   const [v, setV] = useState(log);
   const [hours, setHours] = useState("");
+  const [saving, setSaving] = useState(false);
+  // 打开并读入这条记录以后才开始暂存（免得拿旧内容当底）
+  const [ready, setReady] = useState(false);
   // 项目、日期等设置默认折叠，记住上次是否展开
   const [more, setMore] = useState(false);
   // 只在打开时读入；打开期间数据刷新也不覆盖正在改的内容
   useEffect(() => {
-    if (!open) return;
+    if (!open) return setReady(false);
     setV(log);
     setHours(log.hours === null ? "" : String(log.hours));
     setMore(readLocal("mydoc.logDialogMore", false));
+    setReady(true);
   }, [open]);
+  // 改到一半网络断了、页面关了，下次打开可以恢复
+  const draft = useFormDraft(ready ? `log-${log.id}` : null, { content: v.content, detail: v.detail }, (d) =>
+    setV((cur) => ({ ...cur, ...d })),
+  );
   // 停用的项目不再出现在选项里，除非这条记录本来就属于它
   const options = projects.filter((p) => !p.archived || p.id === log.projectId);
   const h = hours.trim() === "" ? null : Number(hours);
   const valid = v.content.trim() && (h === null || (h >= 0 && h <= 24));
 
-  const save = () => {
-    if (!valid) return;
+  const save = async () => {
+    if (!valid || saving) return;
     const next: Partial<WorkLog> = {};
     const content = v.content.trim();
     if (content !== log.content) next.content = content;
@@ -884,7 +902,9 @@ function LogEditDialog({
     if (v.period !== log.period) next.period = v.period;
     if (h !== log.hours) next.hours = h;
     if (v.done !== log.done) next.done = v.done;
-    void onSave(next);
+    setSaving(true);
+    if (await onSave(next)) draft.clear();
+    setSaving(false);
   };
 
   return (
@@ -896,13 +916,14 @@ function LogEditDialog({
       footer={
         <>
           <Button onClick={onClose}>取消</Button>
-          <Button variant="primary" disabled={!valid} onClick={save}>
+          <Button variant="primary" disabled={!valid} loading={saving} onClick={() => void save()}>
             保存
           </Button>
         </>
       }
     >
       <div className="flex flex-col gap-3">
+        <DraftBanner draft={draft} />
         <Textarea
           rows={2}
           aria-label="工作内容"
@@ -916,7 +937,7 @@ function LogEditDialog({
           rows={10}
           value={v.detail}
           onChange={(detail) => setV({ ...v, detail })}
-          onSubmit={save}
+          onSubmit={() => void save()}
           aria-label="明细"
           placeholder={
             "明细：过程、原因、改了哪些地方、链接…\n只留在这条记录里，不进日报。支持列表、待办，Ctrl + 回车保存"
@@ -1027,7 +1048,7 @@ function SummaryField({
   label: string;
   value: string;
   auto: string;
-  onSave: (v: string | null) => Promise<void>;
+  onSave: (v: string | null) => Promise<unknown>;
 }) {
   const copy = useCopy();
   const [draft, setDraft] = useState(value);
@@ -1074,7 +1095,7 @@ function SummaryField({
   );
 }
 
-function useAiPolish(kind: Kind, date: string, run: (fn: () => Promise<unknown>) => Promise<void>) {
+function useAiPolish(kind: Kind, date: string, run: (fn: () => Promise<unknown>) => Promise<boolean>) {
   const ui = useUI();
   const [busy, setBusy] = useState(false);
   const polish = async () => {
@@ -1098,7 +1119,7 @@ function DailyCard({
 }: {
   report: DailyReport;
   date: string;
-  run: (fn: () => Promise<unknown>) => Promise<void>;
+  run: (fn: () => Promise<unknown>) => Promise<boolean>;
 }) {
   const copy = useCopy();
   const ai = useAiPolish("daily", date, run);
@@ -1181,7 +1202,7 @@ function ProjectsDialog({
   open: boolean;
   onClose: () => void;
   data: WorkData;
-  run: (fn: () => Promise<unknown>) => Promise<void>;
+  run: (fn: () => Promise<unknown>) => Promise<boolean>;
 }) {
   const ui = useUI();
   const [hours, setHours] = useState(String(data.settings.dailyHours));
@@ -1281,7 +1302,7 @@ function ProjectEditor({
   project: WorkProject;
   /** 最近一次的项目进展，用来显示状态 */
   latest?: ProjectUpdate;
-  onSave: (patch: Partial<WorkProject>) => Promise<void>;
+  onSave: (patch: Partial<WorkProject>) => Promise<unknown>;
   onDelete: () => void;
 }) {
   const [v, setV] = useState<Record<string, string>>({});
@@ -1327,7 +1348,7 @@ function ProjectEditor({
   );
 }
 
-function NewProject({ onAdd, first }: { onAdd: (body: object) => Promise<void>; first: boolean }) {
+function NewProject({ onAdd, first }: { onAdd: (body: object) => Promise<unknown>; first: boolean }) {
   const [v, setV] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -1371,7 +1392,7 @@ function RemindDialog({
   open: boolean;
   onClose: () => void;
   data: WorkData;
-  run: (fn: () => Promise<unknown>) => Promise<void>;
+  run: (fn: () => Promise<unknown>) => Promise<boolean>;
 }) {
   const ui = useUI();
   const s = data.settings;

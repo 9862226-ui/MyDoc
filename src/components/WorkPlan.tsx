@@ -451,7 +451,7 @@ export function ShutdownDialog({
   onClose: () => void;
   date: string;
   data: WorkData;
-  run: (fn: () => Promise<unknown>) => Promise<void>;
+  run: (fn: () => Promise<unknown>) => Promise<unknown>;
 }) {
   const ui = useUI();
   const { data: plan } = useDayPlan(date);

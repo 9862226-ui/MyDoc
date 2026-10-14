@@ -50,6 +50,7 @@ import { currentPeriod, weekdayLabel } from "@/lib/worklog";
 import { refKey } from "@/lib/refs";
 import { BacklinkList, useBacklinks } from "./Backlinks";
 import { Markdown } from "./Markdown";
+import { DraftBanner, useFormDraft } from "./FormDraft";
 import { clearDraft, MarkdownEditor } from "./MarkdownEditor";
 import {
   Button,
@@ -553,6 +554,21 @@ function MeetingEditor({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const draftName = meeting ? `meeting-${meeting.id}` : "meeting-new";
+  // 整张表单都暂存在浏览器里，保存成功才清掉
+  const draft = useFormDraft(
+    draftName,
+    { title, date, projectId, attendees, source, notes },
+    (v) => {
+      setTitle(v.title);
+      setDate(v.date);
+      setProjectId(v.projectId);
+      setAttendees(v.attendees);
+      setSource(v.source);
+      setNotes(v.notes);
+      if (v.source.trim()) setShowSource(true);
+    },
+    (v) => !v.title.trim() && !v.attendees.trim() && !v.source.trim() && isBlankNotes(v.notes),
+  );
   const sentences = useMemo(() => splitSentences(source), [source]);
   const projects = (work?.projects ?? []).filter((p) => !p.archived || p.id === projectId);
   const project = projects.find((p) => p.id === projectId);
@@ -616,11 +632,12 @@ function MeetingEditor({
       const m = meeting
         ? await api<Meeting>(`/api/meetings/${meeting.id}`, { method: "PATCH", body })
         : await api<Meeting>(KEY, { body });
+      draft.clear();
       clearDraft(draftName);
       ui.toast(meeting ? "已保存" : "已添加会议纪要");
       onSaved(m);
     } catch (e) {
-      setError((e as Error).message);
+      ui.toast(`${(e as Error).message}。写的内容已暂存在这台设备上，不会丢`, { kind: "error" });
       setBusy(false);
     }
   };
@@ -673,6 +690,8 @@ function MeetingEditor({
           </button>
         </div>
       </div>
+
+      <DraftBanner draft={draft} />
 
       {showMeta && (
         <div className="grid gap-3 rounded-lg bg-hover/60 p-3 sm:grid-cols-3">
@@ -779,7 +798,6 @@ function MeetingEditor({
             value={notes}
             onChange={setNotes}
             onSubmit={() => void save()}
-            draft={draftName}
             rows={16}
             grow
             placeholder="要点、结论和待办；待办写成「- [ ] 事情」，加上「@张三」「周五前」会认出负责人和截止日期"

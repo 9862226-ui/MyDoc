@@ -109,6 +109,18 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
   uiRef.current = ui;
 
+  // 断网、恢复时提示：断网期间写的会议纪要、工作记录会先暂存在浏览器里
+  useEffect(() => {
+    const off = () => toast("网络断开了，正在写的内容会先暂存在这台设备上，恢复后再保存", { kind: "error" });
+    const on = () => toast("网络已恢复");
+    window.addEventListener("offline", off);
+    window.addEventListener("online", on);
+    return () => {
+      window.removeEventListener("offline", off);
+      window.removeEventListener("online", on);
+    };
+  }, [toast]);
+
   // 快捷键：Ctrl/⌘+K 或 / 搜索，N 添加链接，C 记一笔工作，先按 G 再按字母跳到对应页面
   const goAt = useRef(0);
   useEffect(() => {
