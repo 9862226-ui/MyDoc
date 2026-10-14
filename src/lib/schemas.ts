@@ -498,6 +498,15 @@ export const meetingTemplatesSchema = z.object({
     .max(20, "最多存 20 个模板"),
 });
 
+/** AI 整理会议纪要（文字稿长度在 meeting-ai 里检查，给出更好懂的提示） */
+export const meetingAiSchema = z.object({
+  title: z.string().max(200).default(""),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "日期格式不正确"),
+  attendees: z.string().max(500).default(""),
+  source: z.string().max(200_000),
+  sections: z.array(z.string().trim().min(1).max(40)).max(12).default([]),
+});
+
 export const meetingCreateSchema = z.object({
   title: meetingFields.title,
   date: meetingFields.date,

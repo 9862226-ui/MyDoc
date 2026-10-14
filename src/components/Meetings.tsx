@@ -12,6 +12,7 @@ import {
   FileText,
   History,
   ListTodo,
+  Sparkles,
   NotebookPen,
   PanelRightClose,
   PanelRightOpen,
@@ -48,6 +49,7 @@ import {
 } from "@/lib/meetings";
 import { currentPeriod, weekdayLabel } from "@/lib/worklog";
 import { refKey } from "@/lib/refs";
+import { useAiSettings } from "./AiOrganize";
 import { BacklinkList, useBacklinks } from "./Backlinks";
 import { Markdown } from "./Markdown";
 import { DraftBanner, useFormDraft } from "./FormDraft";
@@ -642,6 +644,65 @@ function MeetingEditor({
     }
   };
 
+  // AI 一键整理：按纪要模板的小节整理原文，结果直接填进纪要，可以撤销
+  const { data: ai } = useAiSettings();
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiSeconds, setAiSeconds] = useState(0);
+  useEffect(() => {
+    if (!aiBusy) return;
+    setAiSeconds(0);
+    const t = setInterval(() => setAiSeconds((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [aiBusy]);
+  const organize = async () => {
+    if (
+      !isBlankNotes(notes) &&
+      !(await ui.confirm({
+        title: "用 AI 整理的结果替换现在的纪要？",
+        message: "整理完以后可以撤销，回到现在的内容",
+        confirmText: "替换",
+      }))
+    )
+      return;
+    setAiBusy(true);
+    const before = { title, notes };
+    try {
+      const r = await api<{ notes: string; title: string }>("/api/meetings/ai", {
+        body: { title, date, attendees, source, sections: sectionsOf(notes) },
+      });
+      setNotes(r.notes);
+      if (!title.trim() && r.title) setTitle(r.title);
+      ui.toast("AI 已整理好，看一遍、改一改再保存", {
+        action: {
+          label: "撤销",
+          onClick: () => {
+            setNotes(before.notes);
+            setTitle(before.title);
+          },
+        },
+      });
+    } catch (e) {
+      ui.toast((e as Error).message, { kind: "error" });
+    }
+    setAiBusy(false);
+  };
+
+  const router = useRouter();
+  const aiClick = async () => {
+    if (!source.trim()) {
+      setShowSource(true);
+      writeLocal(SOURCE_KEY, true);
+      requestAnimationFrame(() => document.getElementById("meeting-source")?.focus());
+      return ui.toast("先把会议文字稿粘贴到「会议原文」里", { kind: "info" });
+    }
+    if (ai && !ai.ready)
+      return ui.toast("还没有配置 AI 模型", {
+        kind: "info",
+        action: { label: "去设置", onClick: () => router.push("/settings#ai") },
+      });
+    await organize();
+  };
+
   const toggleSource = () => {
     setShowSource(!showSource);
     writeLocal(SOURCE_KEY, !showSource);
@@ -787,7 +848,17 @@ function MeetingEditor({
       <div className={cx("grid items-start gap-4", showSource && "xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]")}>
         <div className="flex min-w-0 flex-col gap-1.5">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-[13px] font-medium">纪要</span>
+            <span className="mr-auto text-[13px] font-medium">纪要</span>
+            <Button
+              size="sm"
+              variant="text"
+              loading={aiBusy}
+              title={`把会议原文按「${(sections.length ? sections : ["要点", "结论", "待办"]).join("、")}」整理成纪要，整理完可以撤销`}
+              onClick={() => void aiClick()}
+            >
+              {!aiBusy && <Sparkles size={14} />}
+              {aiBusy ? `AI 整理中… ${aiSeconds} 秒` : "AI 整理"}
+            </Button>
             <Button size="sm" variant="ghost" aria-pressed={showSource} onClick={toggleSource}>
               {showSource ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
               {showSource ? "收起原文" : source.trim() ? `会议原文 · ${sentences.length} 句` : "粘贴会议原文"}
@@ -810,6 +881,7 @@ function MeetingEditor({
               rows={source ? 4 : 6}
               value={source}
               onChange={(e) => setSource(e.target.value)}
+              id="meeting-source"
               aria-label="会议原文"
               placeholder="粘贴会议文字稿：钉钉闪记、通义听悟、飞书妙记导出的文字，或者微信里的讨论，然后一句一句挑到纪要里"
               className="resize-y text-[13px] leading-6"
