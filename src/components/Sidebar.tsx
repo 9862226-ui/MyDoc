@@ -199,7 +199,7 @@ export function Sidebar({ variant = "sidebar" }: { variant?: "sidebar" | "page" 
             />
             <QuickTile href="/snippets" icon="quote" label="摘录" count={data?.snippets.length ?? 0} />
             <QuickTile href="/all" icon="layers" label="全部链接" count={counts.all} />
-            <QuickTile href="/recent" icon="clock" label="最近访问" />
+            <QuickTile href="/work" icon="work" label="工作记录" />
             <QuickTile href="/trash" icon="trash" label="回收站" />
           </ul>
         ) : (
@@ -247,6 +247,7 @@ export function Sidebar({ variant = "sidebar" }: { variant?: "sidebar" | "page" 
               count={data?.snippets.length ?? 0}
               active={pathname === "/snippets"}
             />
+            <NavItem href="/work" icon="work" label="工作记录" active={pathname === "/work"} />
             <NavItem href="/all" icon="layers" label="全部链接" count={counts.all} active={pathname === "/all"} />
           </ul>
         )}

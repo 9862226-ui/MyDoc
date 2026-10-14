@@ -6,10 +6,14 @@ import * as rr from "./reminder-repo";
 import { isReminderDue, reminderState, sortReminders } from "./reminders";
 import * as repo from "./repo";
 import { parseShareText } from "./share-text";
+import { getNotifyConfig } from "./notify";
+import { zonedNow } from "./settings";
 import * as sr from "./snippet-repo";
 import type { AppData, Link, Reminder, Snippet } from "./types";
 import { toHttpUrl, urlKey } from "./url";
 import { projectIndex, projectPathLabel, search, snippetMatches } from "./view";
+import { buildDaily, buildWeekly, type WorkLog } from "./worklog";
+import * as wr from "./worklog-repo";
 
 /** 工具执行时出的错：返回给 AI 看，方便它自己改正 */
 export class ToolError extends Error {}
@@ -523,4 +527,104 @@ export const TOOLS: Tool[] = [
       return { deleted: true };
     },
   }),
+  /* ---------- 工作记录 ---------- */
+
+  tool({
+    name: "add_work_log",
+    title: "记录工作",
+    description:
+      "记一条工作记录，用来生成日报、周报。干完一件事后调用，content 用一句话写清做了什么（以动词开头，例如「修复文件删除后切片未清理的问题」）。" +
+      "一次做了几件事就调用几次或在 contents 里传多条。",
+    input: z.object({
+      contents: z.array(z.string().trim().min(1).max(2000)).min(1).max(20).describe("工作内容，每条一句话"),
+      project: z
+        .union([z.number().int(), z.string().trim().min(1)])
+        .optional()
+        .describe(
+          "报工项目：id、名称（可以只写一部分）或项目编号；不填就不选项目。可以先用 list_work_logs 看有哪些项目",
+        ),
+      date: date.optional().describe("日期，默认今天"),
+      period: z.enum(["am", "pm"]).optional().describe("上午 am / 下午 pm，默认按当前时间"),
+      hours: z.number().min(0).max(24).optional().describe("用了几小时；不填时日报里按正常工时平均分"),
+      done: z.boolean().optional().describe("是否已完成，默认 true；没做完的会放进周报的下周计划"),
+    }),
+    run: ({ db }, a) => {
+      let projectId: number | null = null;
+      if (a.project !== undefined) {
+        const p = wr.findWorkProject(db, a.project);
+        if (!p) {
+          const names = wr
+            .listWorkProjects(db)
+            .filter((x) => !x.archived)
+            .map((x) => x.name);
+          throw new ToolError(`没有找到项目「${a.project}」。已有项目：${names.join("、") || "（还没有）"}`);
+        }
+        projectId = p.id;
+      }
+      const now = zonedNow(getNotifyConfig(db).timeZone);
+      const logs = wr.createWorkLogs(
+        db,
+        a.contents.map((content) => ({
+          date: a.date ?? now.date,
+          period: a.period ?? (now.hour < 12 ? "am" : "pm"),
+          projectId,
+          content,
+          hours: a.hours ?? null,
+          done: a.done ?? true,
+        })),
+        "mcp",
+      );
+      return { added: logs.map((l) => workLogOut(l, db)) };
+    },
+  }),
+
+  tool({
+    name: "list_work_logs",
+    title: "查看工作记录",
+    description: "列出某一周的工作记录和可用的报工项目。",
+    input: z.object({ date: date.optional().describe("这一周里的任意一天，默认今天") }),
+    annotations: { readOnlyHint: true },
+    run: ({ db }, a) => {
+      const data = wr.getWorkWeek(db, a.date ?? zonedNow(getNotifyConfig(db).timeZone).date);
+      return {
+        projects: data.projects
+          .filter((p) => !p.archived)
+          .map((p) => ({ id: p.id, name: p.name, code: p.code || undefined })),
+        logs: data.logs.map((l) => workLogOut(l, db, data.projects)),
+      };
+    },
+  }),
+
+  tool({
+    name: "get_work_report",
+    title: "生成日报或周报",
+    description: "按公司日报、周报的格式整理工作记录，返回可以直接粘贴的内容。",
+    input: z.object({
+      kind: z.enum(["daily", "weekly"]).describe("daily 日报 / weekly 周报"),
+      date: date.optional().describe("日报的日期，或周报那一周里的任意一天；默认今天"),
+    }),
+    annotations: { readOnlyHint: true },
+    run: ({ db }, a) => {
+      const day = a.date ?? zonedNow(getNotifyConfig(db).timeZone).date;
+      const data = wr.getWorkWeek(db, day);
+      if (a.kind === "daily") {
+        const { autoAmSummary: _a, autoPmSummary: _b, ...r } = buildDaily(data, day);
+        return r;
+      }
+      const { autoSummary: _a, autoPlan: _b, ...r } = buildWeekly(data, day);
+      return r;
+    },
+  }),
 ];
+
+function workLogOut(l: WorkLog, db: DB, projects = wr.listWorkProjects(db)) {
+  return {
+    id: l.id,
+    date: l.date,
+    period: l.period,
+    project: projects.find((p) => p.id === l.projectId)?.name ?? null,
+    content: l.content,
+    hours: l.hours,
+    done: l.done,
+  };
+}

@@ -13,7 +13,8 @@ const SERVER_INFO = { name: "mydoc", title: "MyDoc", version: "1.0.0" };
 
 const INSTRUCTIONS =
   "MyDoc 是用户自己的共享文档链接收藏夹：链接按「分组 / 项目」整理，可以带标签、提取码、备注和有效期；" +
-  "另有提醒事项记录账号、域名、会员等的到期时间；摘录保存不是链接的文字片段（会议结论、账号说明、文章段落）。" +
+  "另有提醒事项记录账号、域名、会员等的到期时间；摘录保存不是链接的文字片段（会议结论、账号说明、文章段落）；" +
+  "工作记录用来生成日报、周报，帮用户完成一项工作后可以用 add_work_log 记一笔。" +
   "找文档时先用 search_links；添加链接前可以用 list_projects 看看放进哪个项目合适，不确定时放进收件箱。";
 
 export interface JsonRpcRequest {

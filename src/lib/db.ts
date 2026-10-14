@@ -122,6 +122,38 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX idx_snippets_project ON snippets(project_id);
   `,
+  `
+  CREATE TABLE work_projects (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    code TEXT NOT NULL DEFAULT '',
+    task_name TEXT NOT NULL DEFAULT '',
+    task_code TEXT NOT NULL DEFAULT '',
+    archived INTEGER NOT NULL DEFAULT 0,
+    sort INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE work_logs (
+    id INTEGER PRIMARY KEY,
+    date TEXT NOT NULL,
+    period TEXT NOT NULL DEFAULT 'am',
+    project_id INTEGER REFERENCES work_projects(id) ON DELETE SET NULL,
+    content TEXT NOT NULL,
+    hours REAL,
+    done INTEGER NOT NULL DEFAULT 1,
+    source TEXT NOT NULL DEFAULT 'web',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_work_logs_date ON work_logs(date);
+  CREATE TABLE work_reports (
+    kind TEXT NOT NULL,
+    period_key TEXT NOT NULL,
+    fields_json TEXT NOT NULL DEFAULT '{}',
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (kind, period_key)
+  );
+  `,
 ];
 
 export function migrate(db: DB): void {

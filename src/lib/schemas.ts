@@ -267,3 +267,59 @@ export const aiConfigSchema = z.object({
   autoClassify: z.boolean(),
   allowNewTags: z.boolean(),
 });
+
+/* ---------- 工作记录 ---------- */
+
+const workDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "日期格式不正确");
+const code = (label: string) => z.string().trim().max(60, `${label}不能超过 60 个字`);
+
+const workProjectFields = {
+  name: name("项目名称", 120),
+  code: code("项目编号"),
+  taskName: code("任务名称"),
+  taskCode: code("任务编号"),
+  archived: z.boolean(),
+};
+
+export const workProjectCreateSchema = z.object({
+  name: workProjectFields.name,
+  code: workProjectFields.code.default(""),
+  taskName: workProjectFields.taskName.default(""),
+  taskCode: workProjectFields.taskCode.default(""),
+  archived: workProjectFields.archived.default(false),
+});
+
+export const workProjectPatchSchema = z.object(workProjectFields).partial();
+
+const workLogFields = {
+  date: workDate,
+  period: z.enum(["am", "pm"]),
+  projectId: id.nullable(),
+  content: z.string().trim().min(1, "内容不能为空").max(2000, "内容太长了（最多 2000 字）"),
+  hours: z.number().min(0).max(24, "工时不能超过 24 小时").nullable(),
+  done: z.boolean(),
+};
+
+/** 一次可以加多条（粘贴多行时每行一条） */
+export const workLogCreateSchema = z.object({
+  date: workLogFields.date,
+  period: workLogFields.period,
+  projectId: workLogFields.projectId.default(null),
+  contents: z.array(workLogFields.content).min(1, "内容不能为空").max(50, "一次最多添加 50 条"),
+  hours: workLogFields.hours.default(null),
+  done: workLogFields.done.default(true),
+});
+
+export const workLogPatchSchema = z.object(workLogFields).partial();
+
+const reportText = z.string().max(10000, "内容太长了").nullable().optional();
+
+export const workReportSchema = z.object({
+  kind: z.enum(["daily", "weekly"]),
+  key: workDate,
+  fields: z.object({ amSummary: reportText, pmSummary: reportText, summary: reportText, plan: reportText }),
+});
+
+export const workSettingsSchema = z.object({ dailyHours: z.number().min(0.5).max(24) });
+
+export const workAiSchema = z.object({ kind: z.enum(["daily", "weekly"]), date: workDate });

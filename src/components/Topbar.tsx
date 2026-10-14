@@ -28,6 +28,7 @@ const SIMPLE_TITLES: Record<string, PageTitle> = {
   "/expiring": { title: "到期提醒", parent: "/projects" },
   "/reminders": { title: "到期提醒", parent: "/projects" },
   "/snippets": { title: "摘录", parent: "/projects" },
+  "/work": { title: "工作记录", parent: "/projects" },
   "/all": { title: "全部链接", parent: "/projects" },
   "/recent": { title: "最近访问", parent: "/" },
   "/trash": { title: "回收站", parent: "/projects" },
@@ -173,6 +174,15 @@ const TABS: { href: string; label: string; icon: NavIconName; match: (p: string)
   { href: "/settings", label: "我的", icon: "user", match: (p) => p === "/settings" },
 ];
 
+const FAB_LABELS: Record<string, string> = { "/reminders": "添加提醒", "/snippets": "添加摘录", "/work": "记一笔" };
+
+/** 工作记录页的输入框在页面顶部，点添加按钮时滚过去并聚焦 */
+function focusWorkInput() {
+  const el = document.getElementById("work-input");
+  el?.scrollIntoView({ block: "center", behavior: "smooth" });
+  el?.focus({ preventScroll: true });
+}
+
 /** 手机端底部标签栏 + 右下角的添加按钮 */
 export function TabBar() {
   const ui = useUI();
@@ -183,10 +193,13 @@ export function TabBar() {
       {showFab && (
         <button
           type="button"
-          aria-label={pathname === "/reminders" ? "添加提醒" : pathname === "/snippets" ? "添加摘录" : "添加链接"}
-          onClick={() =>
-            pathname === "/reminders" ? ui.editReminder() : pathname === "/snippets" ? ui.editSnippet() : ui.addLink()
-          }
+          aria-label={FAB_LABELS[pathname] ?? "添加链接"}
+          onClick={() => {
+            if (pathname === "/reminders") ui.editReminder();
+            else if (pathname === "/snippets") ui.editSnippet();
+            else if (pathname === "/work") focusWorkInput();
+            else ui.addLink();
+          }}
           className="fixed right-5 bottom-[calc(76px+env(safe-area-inset-bottom))] z-30 flex size-[52px] cursor-pointer items-center justify-center rounded-full bg-accent text-white shadow-[0_6px_16px_rgb(51_112_255/0.4)] active:bg-accent-hover md:hidden"
         >
           <Plus size={24} strokeWidth={2.4} />
