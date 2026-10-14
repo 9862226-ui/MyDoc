@@ -28,6 +28,7 @@ import { api, readLocal, writeLocal } from "@/lib/client";
 import { localDate } from "@/lib/format";
 import { toggleTask } from "@/lib/md-edit";
 import { refToken } from "@/lib/refs";
+import { readWorkFilters, type WorkFilters } from "@/lib/views";
 import {
   buildDaily,
   buildWeekly,
@@ -124,6 +125,8 @@ export function WorkView() {
   const [highlight, setHighlight] = useState<number | null>(null);
   // 接着做：把内容和引用填进输入框
   const [prefill, setPrefill] = useState<Prefill | null>(null);
+  // 打开保存的视图：周报列表的筛选条件
+  const [historyFilter, setHistoryFilter] = useState<(WorkFilters & { key: number }) | undefined>();
   useEffect(() => {
     const day = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : null;
     if (day && logParam) {
@@ -140,6 +143,8 @@ export function WorkView() {
       setDailyView("day");
     }
     if (doParam === "capture") setCaptureKey((k) => k + 1);
+    const filters = doParam === "weekly" ? readWorkFilters(params) : null;
+    if (filters) setHistoryFilter({ ...filters, key: Date.now() });
     if (doParam === "plan") setPlanOpen(true);
     if (doParam === "shutdown") setShutdownOpen(true);
     if (doParam) router.replace(day ? `/work?date=${day}` : "/work", { scroll: false });
@@ -355,7 +360,13 @@ export function WorkView() {
               />
             </div>
           ) : (
-            <WorkHistory selected={weekStart(date)} today={today} onSelectWeek={setDate} onOpenDay={openDay} />
+            <WorkHistory
+              selected={weekStart(date)}
+              today={today}
+              onSelectWeek={setDate}
+              onOpenDay={openDay}
+              initial={historyFilter}
+            />
           )}
           {kind === "daily" ? (
             !focus && <DailyCard report={daily} date={date} run={run} />

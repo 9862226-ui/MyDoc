@@ -395,6 +395,18 @@ export const workReportSchema = z.object({
   }),
 });
 
+const viewName = z.string().trim().min(1, "名称不能为空").max(30, "名称最多 30 个字");
+const viewHref = z
+  .string()
+  .max(500)
+  .refine((s) => s.startsWith("/") && !s.startsWith("//") && !s.includes("\\"), "地址不正确");
+const viewKind = z.enum(["links", "work"]);
+
+export const viewCreateSchema = z.object({ name: viewName, href: viewHref, kind: viewKind });
+export const viewsSchema = z.object({
+  views: z.array(z.object({ id: z.string().min(1).max(20), name: viewName, href: viewHref, kind: viewKind })).max(30),
+});
+
 /** 写某个项目某一周的进展 */
 export const projectUpdateSchema = z.object({
   projectId: id,

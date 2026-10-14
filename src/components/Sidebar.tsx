@@ -10,6 +10,7 @@ import { safeDecode } from "@/lib/url";
 import { isReminderDue } from "@/lib/reminders";
 import { isExpiring } from "@/lib/view";
 import { NavIcon } from "./nav-icons";
+import { useViews, ViewList } from "./SavedViews";
 import { cx, IconButton, Logo, Menu, ProjectBadge, Skeleton, type MenuItem } from "./ui";
 import { useLinkActions, useUI } from "./ui-context";
 
@@ -53,6 +54,7 @@ export function Sidebar({ variant = "sidebar" }: { variant?: "sidebar" | "page" 
   const ui = useUI();
   const actions = useLinkActions();
   const createMenu = useCreateMenu();
+  const { data: views } = useViews();
   const [collapsed, setCollapsed] = useState<Record<number, boolean>>({});
   const [showArchived, setShowArchived] = useState(false);
   const [tagsOpen, setTagsOpen] = useState(true);
@@ -259,6 +261,12 @@ export function Sidebar({ variant = "sidebar" }: { variant?: "sidebar" | "page" 
               />
               <NavItem href="/all" icon="layers" label="全部链接" count={counts.all} active={pathname === "/all"} />
             </ul>
+            {!!views?.length && (
+              <>
+                <SectionTitle>视图</SectionTitle>
+                <ViewList views={views} />
+              </>
+            )}
           </>
         )}
 

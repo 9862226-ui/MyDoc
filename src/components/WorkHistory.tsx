@@ -1,7 +1,7 @@
 "use client";
 
 import { CircleCheck, Copy, Download, Undo2 } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   buildWeekly,
   dayStats,
@@ -18,6 +18,8 @@ import {
   weeklyText,
   type WorkLog,
 } from "@/lib/worklog";
+import { workViewHref, type WorkFilters } from "@/lib/views";
+import { SaveViewButton } from "./SavedViews";
 import { heatClass, useWorkAll } from "./WorkCalendar";
 import { Button, cx, IconButton, SearchField, Select, Skeleton } from "./ui";
 import { StatusBadge, useCopy, useSubmit } from "./work-ui";
@@ -58,16 +60,25 @@ export function WorkHistory({
   today,
   onSelectWeek,
   onOpenDay,
+  initial,
 }: {
   selected: string;
   today: string;
   onSelectWeek: (date: string) => void;
   onOpenDay: (date: string) => void;
+  /** 打开保存的视图时的筛选条件；key 变了就重新套用 */
+  initial?: WorkFilters & { key: number };
 }) {
   const { data } = useWorkAll();
   const [q, setQ] = useState("");
   const [project, setProject] = useState<string>("all");
   const [status, setStatus] = useState<"all" | "unsubmitted" | "submitted">("all");
+  useEffect(() => {
+    if (!initial) return;
+    setQ(initial.q);
+    setProject(initial.project);
+    setStatus(["unsubmitted", "submitted"].includes(initial.status) ? (initial.status as typeof status) : "all");
+  }, [initial?.key]);
   const copy = useCopy();
   const submit = useSubmit();
   const [limit, setLimit] = useState(PAGE);
@@ -133,6 +144,21 @@ export function WorkHistory({
           <Download size={15} />
           导出
         </Button>
+        {(filtering || status !== "all") && (
+          <SaveViewButton
+            kind="work"
+            href={workViewHref({ q, project, status })}
+            defaultName={[
+              "工作记录",
+              project === "none" ? "未选择项目" : data.projects.find((p) => String(p.id) === project)?.name,
+              status === "submitted" ? "已提交" : status === "unsubmitted" ? "未提交" : "",
+              q.trim() && `「${q.trim()}」`,
+            ]
+              .filter(Boolean)
+              .join(" · ")
+              .slice(0, 30)}
+          />
+        )}
       </div>
 
       {filtering ? (

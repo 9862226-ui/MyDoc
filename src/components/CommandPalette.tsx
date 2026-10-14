@@ -1,6 +1,6 @@
 "use client";
 
-import { NotebookPen, Quote, Search } from "lucide-react";
+import { ListFilter, NotebookPen, Quote, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { copyText, useAppData } from "@/lib/client";
@@ -9,8 +9,10 @@ import { plainText } from "@/lib/md-edit";
 import { platformLabel } from "@/lib/platforms";
 import type { Link, Snippet } from "@/lib/types";
 import { pinyinHits, projectIndex, projectPathLabel, search, type ProjectInfo } from "@/lib/view";
+import type { SavedView } from "@/lib/views";
 import { filterLogs, weekdayLabel, type WorkLog } from "@/lib/worklog";
 import { COMMAND_ICONS, runCommand } from "./commands";
+import { useViews } from "./SavedViews";
 import { cx, DocIcon, Kbd, ProjectBadge, useModKey } from "./ui";
 import { useLinkActions, useUI } from "./ui-context";
 import { useWorkAll } from "./WorkCalendar";
@@ -20,7 +22,8 @@ type Item =
   | { type: "project"; info: ProjectInfo }
   | { type: "snippet"; snippet: Snippet }
   | { type: "work"; log: WorkLog }
-  | { type: "command"; command: Command };
+  | { type: "command"; command: Command }
+  | { type: "view"; view: SavedView };
 type Scope = "all" | "links" | "projects" | "snippets" | "work";
 
 const WORK_LIMIT = 8;
@@ -139,6 +142,11 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
   const result = useMemo(() => (data && query.trim() ? search(data, query) : null), [data, query]);
   // 工作记录不在 AppData 里，单独取（打开搜索时才请求）
   const { data: work } = useWorkAll();
+  const { data: views } = useViews();
+  const viewHits = useMemo(() => {
+    const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    return (views ?? []).filter((v) => words.every((w) => v.name.toLowerCase().includes(w)));
+  }, [views, query]);
   const workHits = useMemo(() => (work && query.trim() ? filterLogs(work.logs, query, "all") : []), [work, query]);
   const workProject = (id: number | null) => work?.projects.find((p) => p.id === id)?.name;
 
@@ -153,6 +161,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
       const favorites = data.links.filter((l) => l.favorite && !recentIds.has(l.id)).slice(0, 6);
       return [
         { title: "快捷操作", items: QUICK_COMMANDS.map((id): Item => ({ type: "command", command: getCommand(id) })) },
+        { title: "视图", items: viewHits.slice(0, 6).map((view): Item => ({ type: "view", view })) },
         { title: "最近访问", items: recent.map((link): Item => ({ type: "link", link })) },
         { title: "收藏", items: favorites.map((link): Item => ({ type: "link", link })) },
       ].filter((s) => s.items.length);
@@ -167,6 +176,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
                 .map((command): Item => ({ type: "command", command }))
             : [],
       },
+      { title: "视图", items: scope === "all" ? viewHits.map((view): Item => ({ type: "view", view })) : [] },
       {
         title: "项目",
         items:
@@ -193,7 +203,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
             : [],
       },
     ].filter((s) => s.items.length);
-  }, [data, result, scope, workHits]);
+  }, [data, result, scope, workHits, viewHits]);
 
   const flat = sections.flatMap((s) => s.items);
   const current = Math.min(active, flat.length - 1);
@@ -204,7 +214,8 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
 
   const choose = (item: Item, copy = false) => {
     onClose();
-    if (item.type === "command")
+    if (item.type === "view") router.push(item.view.href);
+    else if (item.type === "command")
       runCommand(item.command.id, { push: router.push, ui, hasGroups: !!data?.groups.length });
     else if (item.type === "project") router.push(`/p/${item.info.project.id}`);
     else if (item.type === "work") router.push(`/work?date=${item.log.date}`);
@@ -318,7 +329,9 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
                             ? `w${item.log.id}`
                             : item.type === "command"
                               ? `c${item.command.id}`
-                              : `p${item.info.project.id}`
+                              : item.type === "view"
+                                ? `v${item.view.id}`
+                                : `p${item.info.project.id}`
                     }
                     type="button"
                     data-index={idx}
@@ -332,6 +345,24 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
                   >
                     {item.type === "command" ? (
                       <CommandRow command={item.command} query={query} />
+                    ) : item.type === "view" ? (
+                      <>
+                        <span
+                          aria-hidden
+                          className={cx(
+                            "flex size-8 shrink-0 items-center justify-center rounded-md text-white",
+                            item.view.kind === "work" ? "bg-[#13A3A3]" : "bg-accent",
+                          )}
+                        >
+                          <ListFilter size={16} />
+                        </span>
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="truncate">{highlight(item.view.name, query)}</span>
+                          <span className="truncate text-xs leading-5 text-faint">
+                            {item.view.kind === "work" ? "工作记录视图" : "链接视图"}
+                          </span>
+                        </span>
+                      </>
                     ) : item.type === "link" ? (
                       <>
                         <DocIcon url={item.link.url} size={32} />
@@ -413,7 +444,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
                         </span>
                       </>
                     )}
-                    {selected && item.type !== "command" && (
+                    {selected && item.type !== "command" && item.type !== "view" && (
                       <span className="shrink-0 text-xs text-faint max-sm:hidden">
                         ↵ {item.type === "project" ? "进入" : item.type === "snippet" ? "复制" : "打开"}
                       </span>

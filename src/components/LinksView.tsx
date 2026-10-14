@@ -24,8 +24,9 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
+  Suspense,
   useEffect,
   useMemo,
   useRef,
@@ -38,6 +39,7 @@ import {
 import { api, copyText, readLocal, refreshData, shareText, useAppData, writeLocal } from "@/lib/client";
 import { shortTime } from "@/lib/format";
 import { detectPlatform, docKind, type DocKind } from "@/lib/platforms";
+import { linkViewHref, readLinkFilters } from "@/lib/views";
 import type { AppData, Link } from "@/lib/types";
 import {
   applyFilters,
@@ -55,6 +57,7 @@ import {
 import { LinkCard, LinkRow, LinkTableHeader } from "./LinkItem";
 import { DueHeader } from "./DueHeader";
 import { LINKS_MIME } from "./Sidebar";
+import { SaveViewButton } from "./SavedViews";
 import { ProjectSnippets } from "./Snippets";
 import {
   AlarmIcon,
@@ -234,7 +237,16 @@ function headerFor(view: ViewSpec, data: AppData, base: Link[]): Header | null {
   }
 }
 
+/** 地址里可以带筛选条件（保存的视图）：/all?tag=技术&platform=feishu，读地址要包一层 Suspense */
 export function LinksView({ view }: { view: ViewSpec }) {
+  return (
+    <Suspense>
+      <LinksViewInner view={view} />
+    </Suspense>
+  );
+}
+
+function LinksViewInner({ view }: { view: ViewSpec }) {
   const { data, error } = useAppData();
   const ui = useUI();
   const actions = useLinkActions();
@@ -254,6 +266,19 @@ export function LinksView({ view }: { view: ViewSpec }) {
     setSort(readLocal("mydoc.sort", "updated"));
     setLayout(readLocal("mydoc.view", "table"));
   }, []);
+
+  // 打开保存的视图：按地址里的条件筛选
+  const pathname = usePathname();
+  const search = useSearchParams().toString();
+  useEffect(() => {
+    const f = readLinkFilters(new URLSearchParams(search));
+    if (!f) return;
+    setQ(f.q ?? "");
+    setPlatform(f.platform ?? "");
+    setTag(f.tag ?? "");
+    setKind(f.kind ?? "");
+    if (f.sort && f.sort in SORT_LABELS) setSort(f.sort as SortKey);
+  }, [search]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -580,7 +605,7 @@ export function LinksView({ view }: { view: ViewSpec }) {
           )}
 
           {shown.length > 0 && (
-            <p className="text-[13px] text-faint md:px-3">
+            <div className="flex flex-wrap items-center text-[13px] text-faint md:px-3">
               {filtering ? `筛选出 ${shown.length} 个，共 ${base.length} 个链接` : `共 ${base.length} 个链接`}
               {filtering && (
                 <button
@@ -591,7 +616,31 @@ export function LinksView({ view }: { view: ViewSpec }) {
                   清除筛选
                 </button>
               )}
-            </p>
+              {filtering && (
+                <span className="ml-2">
+                  <SaveViewButton
+                    kind="links"
+                    href={linkViewHref(pathname, {
+                      q: q.trim(),
+                      platform,
+                      tag,
+                      kind,
+                      sort: hasFixedOrder(view) || sort === "updated" ? "" : sort,
+                    })}
+                    defaultName={[
+                      header.title,
+                      platform && platforms.find((x) => x.key === platform)?.name,
+                      tag && `#${tag}`,
+                      kind && KIND_GROUPS.find((g) => g.key === kind)?.label,
+                      q.trim() && `「${q.trim()}」`,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")
+                      .slice(0, 30)}
+                  />
+                </span>
+              )}
+            </div>
           )}
         </div>
       )}
