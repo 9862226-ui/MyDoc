@@ -17,6 +17,7 @@ export const urlSchema = z
   });
 
 const id = z.number().int().positive();
+const health = z.enum(["on_track", "at_risk", "off_track"]);
 const tags = z.array(z.string().max(30, "标签不能超过 30 个字")).max(30, "标签太多了");
 const date = z
   .string()
@@ -275,6 +276,16 @@ export const backupSchema = z.object({
           }),
         )
         .default([]),
+      updates: z
+        .array(
+          z.object({
+            project: z.string().min(1),
+            week: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+            health: health,
+            note: z.string().max(5000).default(""),
+          }),
+        )
+        .default([]),
     })
     .optional(),
 });
@@ -382,6 +393,14 @@ export const workReportSchema = z.object({
     draft: weeklyDraft.nullable().optional(),
     submittedAt: z.string().max(40).nullable().optional(),
   }),
+});
+
+/** 写某个项目某一周的进展 */
+export const projectUpdateSchema = z.object({
+  projectId: id,
+  week: workDate,
+  health: health,
+  note: z.string().max(5000, "进展太长了（最多 5000 字）").default(""),
 });
 
 const planText = z.string().trim().min(1, "内容不能为空").max(2000, "内容太长了（最多 2000 字）");

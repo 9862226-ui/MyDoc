@@ -11,7 +11,9 @@ import {
   shiftDate,
   weekStart,
   type DailyFields,
+  type Health,
   type Period,
+  type ProjectUpdate,
   type ReportKind,
   type WeeklyFields,
   type WorkData,
@@ -276,6 +278,7 @@ export function getWorkWeek(db: DB, date: string): WorkData {
     settings: getWorkSettings(db),
     reports,
     remind: { pushReady: !!getNotifyConfig(db).target.trim(), last: getRemindState(db).last },
+    updates: listProjectUpdates(db),
   };
 }
 
@@ -305,6 +308,7 @@ export function getWorkAll(db: DB): WorkData {
     settings: getWorkSettings(db),
     reports,
     remind: { pushReady: !!getNotifyConfig(db).target.trim(), last: getRemindState(db).last },
+    updates: listProjectUpdates(db),
   };
 }
 
@@ -337,6 +341,8 @@ export interface WorkBackup {
     notes: string;
     createdAt: string;
   }[];
+  /** 项目每周的进展；project 是报工项目名称 */
+  updates?: { project: string; week: string; health: Health; note: string }[];
 }
 
 export function exportWork(db: DB): WorkBackup {
@@ -383,6 +389,12 @@ export function exportWork(db: DB): WorkBackup {
       source: m.source,
       notes: m.notes,
       createdAt: m.createdAt,
+    })),
+    updates: listProjectUpdates(db).map((u) => ({
+      project: name(u.projectId) ?? "",
+      week: u.week,
+      health: u.health,
+      note: u.note,
     })),
   };
 }
@@ -431,8 +443,62 @@ export function importWork(db: DB, w: WorkBackup): number {
       if (hasMeeting.get(m.date, m.title)) continue;
       createMeeting(db, { ...m, projectId: m.project === null ? null : (ids.get(m.project) ?? null) }, m.createdAt);
     }
+    // 项目进展：已经写过的那一周不覆盖
+    const hasUpdate = db.prepare("SELECT 1 FROM work_project_updates WHERE project_id = ? AND week = ?");
+    for (const u of w.updates ?? []) {
+      const projectId = ids.get(u.project);
+      if (projectId === undefined || hasUpdate.get(projectId, u.week)) continue;
+      setProjectUpdate(db, { projectId, week: u.week, health: u.health, note: u.note });
+    }
     return added;
   })();
+}
+
+/* ---------- 项目进展 ---------- */
+
+interface UpdateRow {
+  id: number;
+  project_id: number;
+  week: string;
+  health: string;
+  note: string;
+  updated_at: string;
+}
+
+const toUpdate = (r: UpdateRow): ProjectUpdate => ({
+  id: r.id,
+  projectId: r.project_id,
+  week: r.week,
+  health: (["on_track", "at_risk", "off_track"].includes(r.health) ? r.health : "on_track") as Health,
+  note: r.note,
+  updatedAt: r.updated_at,
+});
+
+export function listProjectUpdates(db: DB): ProjectUpdate[] {
+  return (db.prepare("SELECT * FROM work_project_updates ORDER BY week, id").all() as UpdateRow[]).map(toUpdate);
+}
+
+/** 写某个项目某一周的进展（已有的覆盖） */
+export function setProjectUpdate(
+  db: DB,
+  u: { projectId: number; week: string; health: Health; note: string },
+): ProjectUpdate {
+  assertProject(db, u.projectId);
+  const week = weekStart(u.week);
+  const t = now();
+  db.prepare(
+    `INSERT INTO work_project_updates (project_id, week, health, note, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT (project_id, week) DO UPDATE SET health = excluded.health, note = excluded.note, updated_at = excluded.updated_at`,
+  ).run(u.projectId, week, u.health, u.note.trim(), t, t);
+  return toUpdate(
+    db
+      .prepare("SELECT * FROM work_project_updates WHERE project_id = ? AND week = ?")
+      .get(u.projectId, week) as UpdateRow,
+  );
+}
+
+export function deleteProjectUpdate(db: DB, projectId: number, week: string): void {
+  db.prepare("DELETE FROM work_project_updates WHERE project_id = ? AND week = ?").run(projectId, weekStart(week));
 }
 
 /* ---------- 节假日、补班 ---------- */

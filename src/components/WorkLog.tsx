@@ -31,13 +31,16 @@ import {
   buildWeekly,
   currentPeriod,
   dailyText,
+  HEALTH,
   isoWeek,
+  latestUpdate,
   shiftDate,
   splitEntries,
   weekdayLabel,
   weekStart,
   type DailyReport,
   type Period,
+  type ProjectUpdate,
   type WorkData,
   type WorkLog,
   type WorkProject,
@@ -60,6 +63,7 @@ import { WorkCalendar } from "./WorkCalendar";
 import { WorkDailyList } from "./WorkDailyList";
 import { WorkHistory } from "./WorkHistory";
 import { DayPlanCard, PlanDialog, ShutdownDialog } from "./WorkPlan";
+import { HealthDot, ProjectStatusCard } from "./WorkProjectStatus";
 import {
   Banner,
   Button,
@@ -319,7 +323,10 @@ export function WorkView() {
           {kind === "daily" ? (
             !focus && <DailyCard report={daily} date={date} run={run} />
           ) : (
-            <WeeklyEditor data={data} date={date} onSaved={() => void Promise.all([mutate(), refreshWork()])} />
+            <div className="flex min-w-0 flex-col gap-5">
+              <WeeklyEditor data={data} date={date} onSaved={() => void Promise.all([mutate(), refreshWork()])} />
+              <ProjectStatusCard data={data} date={date} onSaved={() => void Promise.all([mutate(), refreshWork()])} />
+            </div>
           )}
         </div>
       )}
@@ -1084,6 +1091,7 @@ function ProjectsDialog({
           <ProjectEditor
             key={p.id}
             project={p}
+            latest={latestUpdate(data, p.id)}
             onSave={(patch) => run(() => api(`/api/work/projects/${p.id}`, { method: "PATCH", body: patch }))}
             onDelete={() => void remove(p)}
           />
@@ -1146,10 +1154,13 @@ function ProjectFields({
 
 function ProjectEditor({
   project,
+  latest,
   onSave,
   onDelete,
 }: {
   project: WorkProject;
+  /** 最近一次的项目进展，用来显示状态 */
+  latest?: ProjectUpdate;
   onSave: (patch: Partial<WorkProject>) => Promise<void>;
   onDelete: () => void;
 }) {
@@ -1169,6 +1180,20 @@ function ProjectEditor({
   };
   return (
     <div className={cx("flex items-center gap-2", project.archived && "opacity-60")}>
+      <span
+        className="flex w-4 shrink-0 justify-center"
+        title={
+          latest
+            ? `第 ${isoWeek(latest.week)} 周：${HEALTH[latest.health]}${latest.note ? ` · ${latest.note}` : ""}`
+            : "还没写过进展"
+        }
+      >
+        {latest ? (
+          <HealthDot health={latest.health} />
+        ) : (
+          <span className="size-2 rounded-full border border-line-strong" />
+        )}
+      </span>
       <div className="min-w-0 flex-1">
         <ProjectFields value={v} onChange={(k, x) => setV((s) => ({ ...s, [k]: x }))} onBlur={save} />
       </div>

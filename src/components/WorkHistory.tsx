@@ -8,6 +8,8 @@ import {
   filterLogs,
   isoWeek,
   logsCsv,
+  projectStatus,
+  projectStatusText,
   shiftDate,
   weekdayLabel,
   weeksWithLogs,
@@ -190,7 +192,12 @@ export function WorkHistory({
                         label="复制全文"
                         size="sm"
                         className="ml-auto"
-                        onClick={() => void copy(`第 ${r.week} 周周报`, weeklyText(r))}
+                        onClick={() =>
+                          void copy(
+                            `第 ${r.week} 周周报`,
+                            weeklyText(r, projectStatusText(projectStatus(data, r.start))),
+                          )
+                        }
                       >
                         <Copy size={15} />
                       </IconButton>

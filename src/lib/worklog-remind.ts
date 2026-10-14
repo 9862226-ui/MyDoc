@@ -7,6 +7,8 @@ import {
   buildWeekly,
   dayStatus,
   isWorkday,
+  projectStatus,
+  projectStatusText,
   reportKey,
   shiftDate,
   weekStart,
@@ -83,7 +85,13 @@ export function remindMessage(kind: RemindKind, data: WorkData, date: string, si
       .map((d) => dayStatus(data, d, date));
     const unsubmitted = statuses.filter((x) => x === "unsubmitted").length;
     const missed = statuses.filter((x) => x === "missed").length;
-    const parts = [unsubmitted && `${unsubmitted} 天日报没提交`, missed && `${missed} 天没有记录`].filter(Boolean);
+    const projects = projectStatus(data, date);
+    const noUpdate = projects.filter((p) => p.missing).length;
+    const parts = [
+      unsubmitted && `${unsubmitted} 天日报没提交`,
+      missed && `${missed} 天没有记录`,
+      noUpdate && `${noUpdate} 个项目没写进展`,
+    ].filter(Boolean);
     note = parts.length ? `本周还有 ${parts.join("、")}。` : "";
     if (!r.logCount) both("这一周还没有工作记录，先补几条，周报就能整理好。");
     else if (!withReport) both(`这周工作 ${r.workDays} 天，记了 ${r.logCount} 条，周报已经整理好了。`);
@@ -91,6 +99,7 @@ export function remindMessage(kind: RemindKind, data: WorkData, date: string, si
       both(`这周工作 ${r.workDays} 天，记了 ${r.logCount} 条，周报已经整理好，可以直接复制：`);
       section("本周总结", r.summaryText);
       section("下周计划", r.planText);
+      section("项目进展", projectStatusText(projects));
     }
   }
   if (note) both(note);

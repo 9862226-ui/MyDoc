@@ -9,6 +9,8 @@ import {
   draftOps,
   reportKey,
   weekStart,
+  projectStatus,
+  projectStatusText,
   weeklyText,
   isoWeek,
   shiftDate,
@@ -75,7 +77,11 @@ export function WeeklyEditor({ data, date, onSaved }: { data: WorkData; date: st
       subtitle={r.logCount ? `${r.logCount} 条记录 · 整理好后点「复制」粘贴到公司系统` : "这一周还没有记录"}
       actions={
         <>
-          <Button size="sm" onClick={() => void copy("整张周报", weeklyText(r))} disabled={!r.logCount}>
+          <Button
+            size="sm"
+            onClick={() => void copy("整张周报", weeklyText(r, projectStatusText(projectStatus(data, date))))}
+            disabled={!r.logCount}
+          >
             <Copy size={14} />
             复制全文
           </Button>

@@ -109,6 +109,22 @@ export interface WeeklyFields {
 
 export type ReportKind = "daily" | "weekly";
 
+/** 项目状态：正常、有风险、已延期 */
+export type Health = "on_track" | "at_risk" | "off_track";
+
+export const HEALTH: Record<Health, string> = { on_track: "正常", at_risk: "有风险", off_track: "已延期" };
+
+/** 报工项目某一周的进展 */
+export interface ProjectUpdate {
+  id: number;
+  projectId: number;
+  /** 那一周的周一 */
+  week: string;
+  health: Health;
+  note: string;
+  updatedAt: string;
+}
+
 export interface WorkData {
   projects: WorkProject[];
   logs: WorkLog[];
@@ -116,6 +132,8 @@ export interface WorkData {
   /** key 为 "daily:2026-10-10" 或 "weekly:2026-10-05"（周一） */
   reports: Record<string, DailyFields & WeeklyFields>;
   remind: RemindInfo;
+  /** 项目每周的进展（全部，数据量不大） */
+  updates?: ProjectUpdate[];
 }
 
 export const reportKey = (kind: ReportKind, key: string) => `${kind}:${key}`;
@@ -667,7 +685,8 @@ export function dailyText(r: DailyReport): string {
   return lines.join("\n");
 }
 
-export function weeklyText(r: WeeklyReport): string {
+/** 整张周报的文字；projects 是「项目进展」（没写过时不带） */
+export function weeklyText(r: WeeklyReport, projects = ""): string {
   const lines = [
     `员工周报 第 ${r.week} 周（${r.start} ~ ${r.end}）`,
     `工作 ${r.workDays} 天，共 ${r.hours} 小时`,
@@ -676,7 +695,70 @@ export function weeklyText(r: WeeklyReport): string {
     r.summaryText,
   ];
   if (r.planText) lines.push("", "下周计划：", r.planText);
+  if (projects) lines.push("", "项目进展：", projects);
   return lines.join("\n");
+}
+
+/* ---------- 项目进展 ---------- */
+
+export interface ProjectStatusRow {
+  project: WorkProject;
+  /** 这一周的记录（同样内容只算一条） */
+  items: string[];
+  /** 这一周写的进展 */
+  update?: ProjectUpdate;
+  /** 之前最近一次的进展 */
+  last?: ProjectUpdate;
+  /** 这一周有记录，但还没写进展 */
+  missing: boolean;
+  history: ProjectUpdate[];
+}
+
+/**
+ * 某一周要写进展的项目：这周有记录的、这周写过进展的、上次是「有风险 / 已延期」还没恢复正常的（风险要一直跟着）。
+ * 停用的项目只在这周写过进展时出现。记录多的排前面
+ */
+export function projectStatus(data: WorkData, date: string): ProjectStatusRow[] {
+  const week = weekStart(date);
+  const end = shiftDate(week, 6);
+  const updates = data.updates ?? [];
+  const rows: ProjectStatusRow[] = [];
+  for (const project of data.projects) {
+    const logs = data.logs.filter((l) => l.projectId === project.id && l.date >= week && l.date <= end);
+    const mine = updates.filter((u) => u.projectId === project.id).sort((a, b) => b.week.localeCompare(a.week));
+    const update = mine.find((u) => u.week === week);
+    const last = mine.find((u) => u.week < week);
+    const risky = !!last && last.health !== "on_track";
+    if (!update && (project.archived || (!logs.length && !risky))) continue;
+    rows.push({
+      project,
+      items: uniqueLines(logs.sort(byTime).map((l) => l.content)),
+      update,
+      last,
+      missing: !update && logs.length > 0,
+      history: mine.filter((u) => u.week < week),
+    });
+  }
+  return rows.sort((a, b) => b.items.length - a.items.length || a.project.name.localeCompare(b.project.name));
+}
+
+/** 复制到周报里的「项目进展」：1. 项目名【状态】进展 */
+export function projectStatusText(rows: ProjectStatusRow[]): string {
+  return rows
+    .filter((r) => r.update)
+    .map((r, i) => {
+      const note = r.update!.note.trim().replace(/\s*\n+\s*/g, "；");
+      return `${i + 1}. ${r.project.name}【${HEALTH[r.update!.health]}】${note}`;
+    })
+    .join("\n");
+}
+
+/** 用这一周的记录拼一段进展，写进展时可以从这里改 */
+export const suggestNote = (items: string[]) => (items.length ? `本周${items.join("；")}` : "");
+
+/** 项目最新的状态（项目列表里显示） */
+export function latestUpdate(data: WorkData, projectId: number): ProjectUpdate | undefined {
+  return (data.updates ?? []).filter((u) => u.projectId === projectId).sort((a, b) => b.week.localeCompare(a.week))[0];
 }
 
 /* ---------- 日历、周报列表、检索 ---------- */

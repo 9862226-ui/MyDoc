@@ -170,6 +170,19 @@ const MIGRATIONS: string[] = [
   `,
   // 工作记录的明细：一句话的工作内容进日报，明细（Markdown）只留在记录里
   `ALTER TABLE work_logs ADD COLUMN detail TEXT NOT NULL DEFAULT '';`,
+  // 报工项目每周的进展：状态（正常 / 有风险 / 已延期）和一段进展说明，每个项目每周一条
+  `
+  CREATE TABLE work_project_updates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES work_projects(id) ON DELETE CASCADE,
+    week TEXT NOT NULL,
+    health TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (project_id, week)
+  );
+  `,
 ];
 
 export function migrate(db: DB): void {
