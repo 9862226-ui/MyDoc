@@ -6,6 +6,7 @@ import {
   Circle,
   CircleCheck,
   Copy,
+  Bell,
   FolderCog,
   NotebookPen,
   Plus,
@@ -13,6 +14,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
+import NextLink from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import useSWR from "swr";
 import { api, copyText, readLocal, writeLocal } from "@/lib/client";
@@ -34,7 +36,22 @@ import {
   type WorkLog,
   type WorkProject,
 } from "@/lib/worklog";
-import { Button, cx, Dialog, Field, IconButton, Input, Select, Skeleton, Spinner, Tabs, Textarea } from "./ui";
+import { LastResult } from "./settings-ui";
+import {
+  Banner,
+  Button,
+  Checkbox,
+  cx,
+  Dialog,
+  Field,
+  IconButton,
+  Input,
+  Select,
+  Skeleton,
+  Spinner,
+  Tabs,
+  Textarea,
+} from "./ui";
 import { useUI } from "./ui-context";
 
 type Kind = "daily" | "weekly";
@@ -67,6 +84,7 @@ export function WorkView() {
   const [kind, setKind] = useState<Kind>("daily");
   const [date, setDate] = useState(() => localDate());
   const [projectsOpen, setProjectsOpen] = useState(false);
+  const [remindOpen, setRemindOpen] = useState(false);
   const { data, mutate } = useWork(date);
   const today = localDate();
 
@@ -104,10 +122,16 @@ export function WorkView() {
             随手记下做了什么，按公司的格式整理成日报、周报，一项一项复制过去
           </p>
         </div>
-        <Button onClick={() => setProjectsOpen(true)} className="max-md:hidden">
-          <FolderCog size={16} />
-          报工项目
-        </Button>
+        <div className="flex shrink-0 gap-2 max-md:hidden">
+          <Button onClick={() => setRemindOpen(true)}>
+            <Bell size={16} />
+            {data?.settings.remindDaily ? `每天 ${data.settings.remindTime} 提醒` : "下班提醒"}
+          </Button>
+          <Button onClick={() => setProjectsOpen(true)}>
+            <FolderCog size={16} />
+            报工项目
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b border-line">
@@ -127,7 +151,7 @@ export function WorkView() {
           <IconButton label={kind === "daily" ? "前一天" : "上一周"} onClick={() => setDate(shiftDate(date, -step))}>
             <ChevronLeft size={18} />
           </IconButton>
-          <span className="min-w-[168px] text-center text-[15px] font-medium tabular-nums">
+          <span className="text-center text-[15px] font-medium tabular-nums max-md:min-w-0 max-md:flex-1 md:min-w-[168px]">
             {kind === "daily"
               ? `${mmdd(date)} ${weekdayLabel(date)}`
               : weekly
@@ -140,6 +164,9 @@ export function WorkView() {
           <Button size="sm" variant="ghost" disabled={isCurrent} onClick={() => setDate(today)} className="ml-1">
             {kind === "daily" ? "今天" : "本周"}
           </Button>
+          <IconButton label="下班提醒" onClick={() => setRemindOpen(true)} className="md:hidden">
+            <Bell size={18} />
+          </IconButton>
           <IconButton label="报工项目" onClick={() => setProjectsOpen(true)} className="md:hidden">
             <FolderCog size={18} />
           </IconButton>
@@ -171,6 +198,7 @@ export function WorkView() {
       )}
 
       {data && <ProjectsDialog open={projectsOpen} onClose={() => setProjectsOpen(false)} data={data} run={run} />}
+      {data && <RemindDialog open={remindOpen} onClose={() => setRemindOpen(false)} data={data} run={run} />}
     </div>
   );
 }
@@ -927,5 +955,165 @@ function NewProject({ onAdd, first }: { onAdd: (body: object) => Promise<void>; 
         添加
       </Button>
     </div>
+  );
+}
+
+/* ---------- 下班提醒 ---------- */
+
+const WEEKDAY_OPTIONS = [1, 2, 3, 4, 5, 6, 0].map((d) => ({ value: d, label: "日一二三四五六"[d] }));
+
+function RemindDialog({
+  open,
+  onClose,
+  data,
+  run,
+}: {
+  open: boolean;
+  onClose: () => void;
+  data: WorkData;
+  run: (fn: () => Promise<unknown>) => Promise<void>;
+}) {
+  const ui = useUI();
+  const s = data.settings;
+  const [testing, setTesting] = useState<Kind | null>(null);
+  const save = (patch: Partial<WorkData["settings"]>) =>
+    run(() => api("/api/work/settings", { method: "PUT", body: patch }));
+
+  const test = async (kind: Kind) => {
+    setTesting(kind);
+    try {
+      await api("/api/work/remind", { body: { kind } });
+      ui.toast("已发送，去微信、钉钉看看");
+    } catch (e) {
+      ui.toast((e as Error).message, { kind: "error" });
+    }
+    setTesting(null);
+  };
+
+  const timeInput = (label: string, value: string, key: "remindTime" | "weeklyTime", disabled: boolean) => (
+    <Input
+      type="time"
+      aria-label={label}
+      value={value}
+      disabled={disabled}
+      onChange={(e) => e.target.value && void save({ [key]: e.target.value })}
+      className="w-32 tabular-nums"
+    />
+  );
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title="下班提醒"
+      description="到点推送到微信、钉钉，提醒写日报、交周报。消息里带上整理好的内容，在手机上就能直接复制。"
+      footer={<Button onClick={onClose}>完成</Button>}
+    >
+      <div className="flex flex-col gap-5">
+        {!data.remind.pushReady && (
+          <Banner
+            tone="warn"
+            action={
+              <NextLink href="/settings#notify" onClick={onClose}>
+                去设置
+              </NextLink>
+            }
+          >
+            还没有设置推送方式，先在「设置 › 提醒推送」里填好企业微信、钉钉或飞书机器人
+          </Banner>
+        )}
+
+        <section className="flex flex-col gap-3">
+          <label className="flex cursor-pointer items-center gap-2 font-medium">
+            <Checkbox checked={s.remindDaily} onChange={(e) => void save({ remindDaily: e.target.checked })} />
+            每天提醒写日报
+          </label>
+          <div className={cx("flex flex-wrap items-center gap-3 pl-6", !s.remindDaily && "opacity-50")}>
+            {timeInput("日报提醒时间", s.remindTime, "remindTime", !s.remindDaily)}
+            <div role="group" aria-label="哪几天提醒" className="flex gap-1">
+              {WEEKDAY_OPTIONS.map((d) => {
+                const on = s.remindDays.includes(d.value);
+                return (
+                  <button
+                    key={d.value}
+                    type="button"
+                    aria-pressed={on}
+                    aria-label={`周${d.label}`}
+                    disabled={!s.remindDaily}
+                    onClick={() =>
+                      void save({
+                        remindDays: on ? s.remindDays.filter((x) => x !== d.value) : [...s.remindDays, d.value],
+                      })
+                    }
+                    className={cx(
+                      "size-8 cursor-pointer rounded-full border text-[13px] transition-colors disabled:cursor-not-allowed",
+                      on
+                        ? "border-accent bg-accent-soft text-accent-text"
+                        : "border-control text-muted hover:border-accent/60",
+                    )}
+                  >
+                    {d.label}
+                  </button>
+                );
+              })}
+            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              loading={testing === "daily"}
+              disabled={!data.remind.pushReady}
+              onClick={() => void test("daily")}
+            >
+              发一条试试
+            </Button>
+          </div>
+        </section>
+
+        <section className="flex flex-col gap-3">
+          <label className="flex cursor-pointer items-center gap-2 font-medium">
+            <Checkbox checked={s.remindWeekly} onChange={(e) => void save({ remindWeekly: e.target.checked })} />
+            每周提醒交周报
+          </label>
+          <div className={cx("flex flex-wrap items-center gap-3 pl-6", !s.remindWeekly && "opacity-50")}>
+            <Select
+              aria-label="周几提醒"
+              value={s.weeklyDay}
+              disabled={!s.remindWeekly}
+              onChange={(e) => void save({ weeklyDay: Number(e.target.value) })}
+              className="w-24"
+            >
+              {WEEKDAY_OPTIONS.map((d) => (
+                <option key={d.value} value={d.value}>
+                  周{d.label}
+                </option>
+              ))}
+            </Select>
+            {timeInput("周报提醒时间", s.weeklyTime, "weeklyTime", !s.remindWeekly)}
+            <Button
+              size="sm"
+              variant="ghost"
+              loading={testing === "weekly"}
+              disabled={!data.remind.pushReady}
+              onClick={() => void test("weekly")}
+            >
+              发一条试试
+            </Button>
+          </div>
+        </section>
+
+        <label className="flex cursor-pointer items-start gap-2 border-t border-line pt-4">
+          <Checkbox
+            checked={s.remindWithReport}
+            onChange={(e) => void save({ remindWithReport: e.target.checked })}
+            className="mt-[3px]"
+          />
+          <span>
+            消息里带上整理好的日报、周报
+            <span className="block text-[13px] text-muted">没有记录时会提醒你先补几条；关掉后只发一句提醒</span>
+          </span>
+        </label>
+        <LastResult label="最近一次提醒" result={data.remind.last} />
+      </div>
+    </Dialog>
   );
 }

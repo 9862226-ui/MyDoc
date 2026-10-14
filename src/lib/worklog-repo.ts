@@ -1,5 +1,6 @@
 import type { DB } from "./db";
 import { HttpError } from "./errors";
+import { getNotifyConfig } from "./notify";
 import { getSetting, setSetting } from "./settings";
 import {
   DEFAULT_WORK_SETTINGS,
@@ -23,6 +24,19 @@ const now = () => new Date().toISOString();
 const SETTINGS_KEY = "worklog";
 export const getWorkSettings = (db: DB) => getSetting(db, SETTINGS_KEY, DEFAULT_WORK_SETTINGS);
 export const setWorkSettings = (db: DB, s: WorkSettings) => setSetting(db, SETTINGS_KEY, s);
+
+export interface RemindState {
+  /** 已经提醒过的日期 / 周（周一的日期） */
+  daily?: string;
+  weekly?: string;
+  /** 推送失败的次数：同一次提醒最多试 3 次 */
+  fails: Record<string, number>;
+  last?: { at: string; ok: boolean; message: string };
+}
+
+const REMIND_STATE_KEY = "worklog.remind";
+export const getRemindState = (db: DB) => getSetting<RemindState>(db, REMIND_STATE_KEY, { fails: {} });
+export const setRemindState = (db: DB, s: RemindState) => setSetting(db, REMIND_STATE_KEY, s);
 
 /* ---------- 报工项目 ---------- */
 
@@ -237,5 +251,11 @@ export function getWorkWeek(db: DB, date: string): WorkData {
       // 数据损坏时当作没改过
     }
   }
-  return { projects: listWorkProjects(db), logs: listWorkLogs(db, start, end), settings: getWorkSettings(db), reports };
+  return {
+    projects: listWorkProjects(db),
+    logs: listWorkLogs(db, start, end),
+    settings: getWorkSettings(db),
+    reports,
+    remind: { pushReady: !!getNotifyConfig(db).target.trim(), last: getRemindState(db).last },
+  };
 }

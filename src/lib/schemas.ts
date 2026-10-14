@@ -320,6 +320,23 @@ export const workReportSchema = z.object({
   fields: z.object({ amSummary: reportText, pmSummary: reportText, summary: reportText, plan: reportText }),
 });
 
-export const workSettingsSchema = z.object({ dailyHours: z.number().min(0.5).max(24) });
+const clock = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "时间格式不正确");
+const weekday = z.number().int().min(0).max(6);
+
+/** 只传要改的字段 */
+export const workSettingsSchema = z
+  .object({
+    dailyHours: z.number().min(0.5).max(24),
+    remindDaily: z.boolean(),
+    remindTime: clock,
+    remindDays: z.array(weekday).max(7),
+    remindWeekly: z.boolean(),
+    weeklyDay: weekday,
+    weeklyTime: clock,
+    remindWithReport: z.boolean(),
+  })
+  .partial();
+
+export const workRemindTestSchema = z.object({ kind: z.enum(["daily", "weekly"]) });
 
 export const workAiSchema = z.object({ kind: z.enum(["daily", "weekly"]), date: workDate });

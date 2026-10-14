@@ -36,9 +36,37 @@ export interface WorkLog {
 export interface WorkSettings {
   /** 每天的正常工时 */
   dailyHours: number;
+  /** 下班提醒写日报 */
+  remindDaily: boolean;
+  /** HH:MM */
+  remindTime: string;
+  /** 哪几天提醒，0 是周日 */
+  remindDays: number[];
+  /** 每周提醒交周报 */
+  remindWeekly: boolean;
+  weeklyDay: number;
+  weeklyTime: string;
+  /** 提醒消息里带上整理好的日报、周报 */
+  remindWithReport: boolean;
 }
 
-export const DEFAULT_WORK_SETTINGS: WorkSettings = { dailyHours: 8 };
+export const DEFAULT_WORK_SETTINGS: WorkSettings = {
+  dailyHours: 8,
+  remindDaily: false,
+  remindTime: "17:30",
+  remindDays: [1, 2, 3, 4, 5],
+  remindWeekly: false,
+  weeklyDay: 5,
+  weeklyTime: "16:00",
+  remindWithReport: true,
+};
+
+/** 下班提醒的状态（给页面显示） */
+export interface RemindInfo {
+  /** 是否已经在「设置 › 提醒推送」里配好了推送方式 */
+  pushReady: boolean;
+  last?: { at: string; ok: boolean; message: string };
+}
 
 /** 手动改过的日报字段；没改过的按记录自动生成 */
 export interface DailyFields {
@@ -59,6 +87,7 @@ export interface WorkData {
   settings: WorkSettings;
   /** key 为 "daily:2026-10-10" 或 "weekly:2026-10-05"（周一） */
   reports: Record<string, DailyFields & WeeklyFields>;
+  remind: RemindInfo;
 }
 
 export const reportKey = (kind: ReportKind, key: string) => `${kind}:${key}`;

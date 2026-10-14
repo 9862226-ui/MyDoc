@@ -3,6 +3,7 @@ import { openDb, type DB } from "./db";
 import {
   buildDaily,
   buildWeekly,
+  DEFAULT_WORK_SETTINGS,
   isoWeek,
   numbered,
   numberedInline,
@@ -12,7 +13,9 @@ import {
   type WorkData,
   type WorkLog,
 } from "./worklog";
+import { DEFAULT_NOTIFY, setNotifyConfig } from "./notify";
 import { buildDailyPrompt } from "./worklog-ai";
+import { isDue, runWorkRemind } from "./worklog-remind";
 import * as wr from "./worklog-repo";
 
 let seq = 0;
@@ -44,8 +47,9 @@ const data = (logs: WorkLog[], reports: WorkData["reports"] = {}): WorkData => (
     { id: 2, name: "数据平台", code: "", taskName: "", taskCode: "", archived: false, sort: 2 },
   ],
   logs,
-  settings: { dailyHours: 8 },
+  settings: { ...DEFAULT_WORK_SETTINGS },
   reports,
+  remind: { pushReady: false },
 });
 
 describe("日期", () => {
@@ -176,5 +180,74 @@ describe("AI 提示词", () => {
     const m = buildDailyPrompt(data([log({ done: false })]), "2026-10-10");
     expect(m[1].content).toContain("[智能造价系统] 整理测试文档（未完成）");
     expect(m[1].content).toContain("下午：\n（没有记录）");
+  });
+});
+
+describe("下班提醒", () => {
+  let db: DB;
+  const sent: { title: string; text: string; markdown: string }[] = [];
+  const send = async (_c: unknown, m: { title: string; text: string; markdown: string }) => {
+    sent.push(m);
+  };
+  // 2026-10-16 是周五；Asia/Shanghai 17:35 = UTC 09:35
+  const at = (hhmm: string, date = "2026-10-16") => {
+    const [h, m] = hhmm.split(":").map(Number);
+    return new Date(Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8)), h - 8, m));
+  };
+
+  beforeEach(() => {
+    db = openDb(":memory:");
+    sent.length = 0;
+    setNotifyConfig(db, {
+      ...DEFAULT_NOTIFY,
+      enabled: false,
+      target: "https://example.test/hook",
+      siteUrl: "https://doc.example.test/",
+    });
+    wr.setWorkSettings(db, { ...DEFAULT_WORK_SETTINGS, remindDaily: true, remindWeekly: true });
+  });
+
+  it("到点才发，一天只发一次，晚太久不补发", async () => {
+    // 周报 16:00 已经到了，日报 17:30 还没到
+    expect(await runWorkRemind(db, at("17:29"), send)).toEqual(["weekly:sent"]);
+    expect(await runWorkRemind(db, at("17:31"), send)).toEqual(["daily:sent"]);
+    expect(await runWorkRemind(db, at("17:45"), send)).toEqual([]);
+    expect(sent.map((m) => m.title)).toEqual(["MyDoc：该交周报了（第 42 周）", "MyDoc：该写日报了"]);
+    expect(sent[1].text).toContain("今天还没有记录工作");
+    expect(sent[1].text).toContain("https://doc.example.test/work");
+    // 第二天 21:00 已经晚了 3 个多小时，不补发；周六不在提醒日里
+    expect(await runWorkRemind(db, at("21:00", "2026-10-15"), send)).toEqual([]);
+    expect(await runWorkRemind(db, at("17:40", "2026-10-17"), send)).toEqual([]);
+  });
+
+  it("没配推送方式或关掉提醒时不发", async () => {
+    setNotifyConfig(db, { ...DEFAULT_NOTIFY, target: "" });
+    expect(await runWorkRemind(db, at("17:31"), send)).toEqual([]);
+  });
+
+  it("消息里带上整理好的日报；失败最多重试 3 次", async () => {
+    wr.createWorkLogs(db, [
+      { date: "2026-10-16", period: "am", projectId: null, content: "整理测试文档", hours: null, done: true },
+      { date: "2026-10-16", period: "pm", projectId: null, content: "修复切片问题", hours: null, done: false },
+    ]);
+    wr.setWorkSettings(db, { ...DEFAULT_WORK_SETTINGS, remindDaily: true });
+    const fail = async () => {
+      throw new Error("网络不通");
+    };
+    for (let i = 0; i < 4; i++) await runWorkRemind(db, at(`17:3${i}`), fail);
+    expect(wr.getRemindState(db).fails["daily:2026-10-16"]).toBe(3);
+    expect(await runWorkRemind(db, at("17:40"), send)).toEqual([]);
+    // 第二天恢复
+    wr.createWorkLogs(db, [
+      { date: "2026-10-19", period: "am", projectId: null, content: "写接口", hours: null, done: true },
+    ]);
+    expect(await runWorkRemind(db, at("17:31", "2026-10-19"), send)).toEqual(["daily:sent"]);
+    expect(sent[0].markdown).toContain("**上午总结**\n1. 写接口");
+    expect(sent[0].text).toContain("（下午总结和上午相同）");
+  });
+
+  it("提醒时间判断", () => {
+    expect(isDue("17:30", new Date(2026, 9, 16, 17, 30))).toBe(true);
+    expect(isDue("17:30", new Date(2026, 9, 16, 20, 31))).toBe(false);
   });
 });
