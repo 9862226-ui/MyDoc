@@ -611,8 +611,17 @@ export const TOOLS: Tool[] = [
         const { autoAmSummary: _a, autoPmSummary: _b, ...r } = buildDaily(data, day);
         return r;
       }
-      const { autoSummary: _a, autoPlan: _b, ...r } = buildWeekly(data, day);
-      return r;
+      const r = buildWeekly(data, day);
+      return {
+        week: r.week,
+        start: r.start,
+        end: r.end,
+        workDays: r.workDays,
+        hours: r.hours,
+        days: r.days,
+        summary: r.summaryText,
+        plan: r.planText,
+      };
     },
   }),
 ];

@@ -208,12 +208,12 @@ export function setReportFields(
   db: DB,
   kind: ReportKind,
   key: string,
-  patch: Record<string, string | null | undefined>,
+  patch: Record<string, unknown>,
 ): DailyFields & WeeklyFields {
-  const fields: Record<string, string> = { ...getReportFields(db, kind, key) };
+  const fields: Record<string, unknown> = { ...getReportFields(db, kind, key) };
   for (const [k, v] of Object.entries(patch)) {
-    if (typeof v === "string") fields[k] = v;
-    else if (v === null) delete fields[k];
+    if (v === null) delete fields[k];
+    else if (v !== undefined) fields[k] = v;
   }
   db.prepare(
     `INSERT INTO work_reports (kind, period_key, fields_json, updated_at) VALUES (?, ?, ?, ?)
@@ -237,12 +237,14 @@ export function getReportFields(db: DB, kind: ReportKind, key: string): DailyFie
 export function getWorkWeek(db: DB, date: string): WorkData {
   const start = weekStart(date);
   const end = shiftDate(start, 6);
+  // 周报里的「上周计划」要用到上一周的记录和整理结果
+  const prev = shiftDate(start, -7);
   const rows = db
     .prepare(
       `SELECT kind, period_key, fields_json FROM work_reports
-       WHERE (kind = 'daily' AND period_key >= ? AND period_key <= ?) OR (kind = 'weekly' AND period_key = ?)`,
+       WHERE (kind = 'daily' AND period_key >= ? AND period_key <= ?) OR (kind = 'weekly' AND period_key IN (?, ?))`,
     )
-    .all(start, end, start) as { kind: ReportKind; period_key: string; fields_json: string }[];
+    .all(start, end, start, prev) as { kind: ReportKind; period_key: string; fields_json: string }[];
   const reports: WorkData["reports"] = {};
   for (const r of rows) {
     try {
@@ -253,7 +255,7 @@ export function getWorkWeek(db: DB, date: string): WorkData {
   }
   return {
     projects: listWorkProjects(db),
-    logs: listWorkLogs(db, start, end),
+    logs: listWorkLogs(db, prev, end),
     settings: getWorkSettings(db),
     reports,
     remind: { pushReady: !!getNotifyConfig(db).target.trim(), last: getRemindState(db).last },

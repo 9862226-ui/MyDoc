@@ -18,6 +18,10 @@ import {
   splitEntries,
   weekdayLabel,
   weekStart,
+  draftOf,
+  draftOps,
+  logKey,
+  type WeeklyDraft,
   type WorkData,
   type WorkLog,
 } from "./worklog";
@@ -144,8 +148,78 @@ describe("周报", () => {
     expect(r).toMatchObject({ week: 41, start: "2026-10-05", end: "2026-10-11", workDays: 3, hours: 24 });
     expect(r.days.map((d) => d.weekday)).toEqual(["周四", "周五", "周六"]);
     expect(r.days[0]).toMatchObject({ projectName: "智能造价系统", projectCode: "10260510065" });
-    expect(r.summary).toBe("1. 代码升级测试\n2. 分段导入支持 Word");
-    expect(r.plan).toBe("1. 继续分段导入支持 Word");
+    expect(r.summaryText).toBe("1. 代码升级测试\n2. 分段导入支持 Word");
+    expect(r.candidates[0]).toMatchObject({ text: "代码升级测试", days: 2, done: true });
+    expect(r.planText).toBe("1. 继续分段导入支持 Word");
+    expect(r.curated).toBe(false);
+  });
+
+  const weekLogs = () => [
+    log({ date: "2026-10-05", content: "升级代码" }),
+    log({ date: "2026-10-06", content: "测试并修正问题" }),
+    log({ date: "2026-10-07", content: "开会", projectId: 2 }),
+    log({ date: "2026-10-08", content: "改名报错", done: false }),
+  ];
+  const withDraft = (logs: WorkLog[], draft: WeeklyDraft, start = "2026-10-05") =>
+    data(logs, { [`weekly:${start}`]: { draft } });
+
+  it("人工整理：取消勾选、合并、拆开、调顺序、手动添加", () => {
+    const logs = weekLogs();
+    let r = buildWeekly(data(logs), "2026-10-05");
+    let d = draftOf(r);
+    d = draftOps.toggle(d, r.candidates.find((c) => c.text === "开会")!, false);
+    r = buildWeekly(withDraft(logs, d), "2026-10-05");
+    expect(r.items.map((i) => i.text)).toEqual(["升级代码", "测试并修正问题", "改名报错"]);
+    expect(r.candidateState[logKey("开会")]).toBe("unchecked");
+
+    d = draftOps.merge(d, [r.items[0].id, r.items[1].id], "完成代码升级与测试");
+    d = draftOps.add(d, "参加技术分享");
+    r = buildWeekly(withDraft(logs, d), "2026-10-05");
+    expect(r.summaryText).toBe("1. 完成代码升级与测试\n2. 改名报错\n3. 参加技术分享");
+    expect(r.items[0].from).toHaveLength(2);
+
+    d = draftOps.move(d, r.items[2].id, -2);
+    expect(d.items[0].text).toBe("参加技术分享");
+    d = draftOps.split(d, r.items[0].id, (k) => r.candidates.find((c) => c.key === k)!.text);
+    r = buildWeekly(withDraft(logs, d), "2026-10-05");
+    expect(r.items.map((i) => i.text)).toEqual(["参加技术分享", "升级代码", "测试并修正问题", "改名报错"]);
+  });
+
+  it("整理后新加的记录标成「新增」，删掉的记录从总结里去掉", () => {
+    const logs = weekLogs();
+    const d = draftOf(buildWeekly(data(logs), "2026-10-05"));
+    const more = [...logs, log({ date: "2026-10-09", content: "写周报" })];
+    const r = buildWeekly(withDraft(more, d), "2026-10-05");
+    expect(r.candidateState[logKey("写周报")]).toBe("new");
+    expect(r.items).toHaveLength(4);
+    const fewer = buildWeekly(withDraft(logs.slice(1), d), "2026-10-05");
+    expect(fewer.items.map((i) => i.text)).not.toContain("升级代码");
+  });
+
+  it("上周计划逐条打勾：打勾的写进本周总结，没做完的建议放进下周计划", () => {
+    const lastWeek = { items: [], excluded: [], doneLastPlan: [], plan: [
+      { id: "a", text: "继续改名报错" },
+      { id: "b", text: "整理上线文档" },
+    ] };
+    const logs = [log({ date: "2026-10-12", content: "写接口" })];
+    const reports = { "weekly:2026-10-05": { draft: lastWeek } };
+    let r = buildWeekly(data(logs, reports), "2026-10-12");
+    expect(r.lastPlan.map((p) => p.text)).toEqual(["继续改名报错", "整理上线文档"]);
+    let d = draftOps.doneLast(draftOf(r), r.lastPlan[0], true);
+    r = buildWeekly(data(logs, { ...reports, "weekly:2026-10-12": { draft: d } }), "2026-10-12");
+    expect(r.summaryText).toBe("1. 改名报错\n2. 写接口");
+    expect(r.planSuggestions.map((p) => p.text)).toEqual(["整理上线文档"]);
+    d = draftOps.planAdd(d, r.planSuggestions[0].text, r.planSuggestions[0].from);
+    d = draftOps.doneLast(d, r.lastPlan[0], false);
+    r = buildWeekly(data(logs, { ...reports, "weekly:2026-10-12": { draft: d } }), "2026-10-12");
+    expect(r.summaryText).toBe("1. 写接口");
+    expect(r.planText).toBe("1. 整理上线文档");
+    expect(r.planSuggestions.map((p) => p.text)).toEqual(["继续改名报错"]);
+  });
+
+  it("上一周没整理过时，上周计划就是那周没做完的事", () => {
+    const r = buildWeekly(data([log({ date: "2026-10-08", content: "改名报错", done: false })]), "2026-10-12");
+    expect(r.lastPlan.map((p) => p.text)).toEqual(["继续改名报错"]);
   });
 });
 

@@ -75,8 +75,8 @@ export interface DailyFields {
 }
 
 export interface WeeklyFields {
-  summary?: string;
-  plan?: string;
+  /** 人工整理过的周报 */
+  draft?: WeeklyDraft;
 }
 
 export type ReportKind = "daily" | "weekly";
@@ -294,6 +294,44 @@ export interface WeeklyDay {
   content: string;
 }
 
+/** 本周总结的候选：本周的记录（同样的内容只算一条），以及上周计划里打勾完成的事 */
+export interface Candidate {
+  key: string;
+  text: string;
+  projectId: number | null;
+  projectName: string;
+  /** 写过几天 */
+  days: number;
+  done: boolean;
+  fromPlan: boolean;
+}
+
+/** 本周总结里的一条；from 是它来自哪些候选（合并后有多个，手动添加的为空） */
+export interface SummaryItem {
+  id: string;
+  text: string;
+  from: string[];
+}
+
+/** 下周计划里的一条；from 是它来自哪个候选（未完成的记录或上周没做完的计划） */
+export interface PlanItem {
+  id: string;
+  text: string;
+  from?: string;
+}
+
+/** 人工整理过的周报；没有时按记录自动生成 */
+export interface WeeklyDraft {
+  items: SummaryItem[];
+  /** 取消勾选的候选 */
+  excluded: string[];
+  plan: PlanItem[];
+  /** 上周计划里已经完成的条目 id */
+  doneLastPlan: string[];
+}
+
+export type CandidateState = "checked" | "unchecked" | "new";
+
 export interface WeeklyReport {
   week: number;
   start: string;
@@ -301,11 +339,68 @@ export interface WeeklyReport {
   workDays: number;
   hours: number;
   days: WeeklyDay[];
-  summary: string;
-  plan: string;
-  autoSummary: string;
-  autoPlan: string;
+  candidates: Candidate[];
+  candidateState: Record<string, CandidateState>;
+  items: SummaryItem[];
+  plan: PlanItem[];
+  /** 建议放进下周计划的：未完成的记录、上周没做完的计划 */
+  planSuggestions: PlanItem[];
+  lastPlan: PlanItem[];
+  doneLastPlan: string[];
+  /** 是否人工整理过 */
+  curated: boolean;
+  /** 编号后的文字，用来复制 */
+  summaryText: string;
+  planText: string;
   logCount: number;
+}
+
+const normalize = (s: string) => s.trim().replace(/[。；;，,]$/, "");
+const withoutContinue = (s: string) => s.replace(/^继续[：:]?/, "");
+export const logKey = (text: string) => `log:${normalize(text)}`;
+export const planKey = (id: string) => `plan:${id}`;
+
+/** 本周记录合成候选：按项目分组（项目按第一次出现的顺序），同样的内容合成一条 */
+function logCandidates(logs: WorkLog[], lookup: ReturnType<typeof projectLookup>): Candidate[] {
+  const byKey = new Map<string, Candidate & { dates: Set<string> }>();
+  for (const l of logs) {
+    const key = logKey(l.content);
+    const c = byKey.get(key);
+    if (c) {
+      c.dates.add(l.date);
+      c.days = c.dates.size;
+      c.done &&= l.done;
+    } else {
+      byKey.set(key, {
+        key,
+        text: normalize(l.content),
+        projectId: l.projectId,
+        projectName: lookup.name(l.projectId),
+        days: 1,
+        done: l.done,
+        fromPlan: false,
+        dates: new Set([l.date]),
+      });
+    }
+  }
+  const order: (number | null)[] = [];
+  for (const c of byKey.values()) if (!order.includes(c.projectId)) order.push(c.projectId);
+  return [...byKey.values()]
+    .sort((a, b) => order.indexOf(a.projectId) - order.indexOf(b.projectId))
+    .map(({ dates: _dates, ...c }) => c);
+}
+
+/** 某一周最后定下来的下周计划（给下一周的「上周计划」用） */
+function finalPlan(data: WorkData, start: string): PlanItem[] {
+  const draft = data.reports[reportKey("weekly", start)]?.draft;
+  if (draft) return draft.plan;
+  const end = shiftDate(start, 6);
+  const logs = data.logs.filter((l) => l.date >= start && l.date <= end && !l.done).sort(byTime);
+  return uniqueLines(logs.map((l) => l.content)).map((t) => ({
+    id: logKey(t),
+    text: `继续${withoutContinue(t)}`,
+    from: logKey(t),
+  }));
 }
 
 export function buildWeekly(data: WorkData, date: string): WeeklyReport {
@@ -332,10 +427,55 @@ export function buildWeekly(data: WorkData, date: string): WeeklyReport {
     });
   }
 
-  const autoSummary = numbered(logs.map((l) => l.content));
-  // 没做完的事项自动放进下周计划
-  const autoPlan = numbered(logs.filter((l) => !l.done).map((l) => `继续${l.content.replace(/^继续/, "")}`));
-  const fields = data.reports[reportKey("weekly", start)] ?? {};
+  const draft = data.reports[reportKey("weekly", start)]?.draft;
+  const lastPlan = finalPlan(data, shiftDate(start, -7));
+  const doneLastPlan = (draft?.doneLastPlan ?? []).filter((id) => lastPlan.some((p) => p.id === id));
+  const candidates = [
+    ...lastPlan
+      .filter((p) => doneLastPlan.includes(p.id))
+      .map((p) => ({
+        key: planKey(p.id),
+        text: withoutContinue(p.text),
+        projectId: null,
+        projectName: "上周计划",
+        days: 0,
+        done: true,
+        fromPlan: true,
+      })),
+    ...logCandidates(logs, lookup),
+  ];
+  const keys = new Set(candidates.map((c) => c.key));
+  const textOf = new Map(candidates.map((c) => [c.key, c.text]));
+
+  // 人工整理过：去掉已经不存在的来源（记录被删了）；来源全没了的条目也去掉，手动添加的保留
+  const items: SummaryItem[] = draft
+    ? draft.items
+        .map((it) => ({ ...it, from: it.from.filter((k) => keys.has(k)) }))
+        .filter((it, i) => !draft.items[i].from.length || it.from.length)
+    : candidates.map((c) => ({ id: c.key, text: c.text, from: [c.key] }));
+
+  const used = new Set(items.flatMap((it) => it.from));
+  const candidateState: Record<string, CandidateState> = {};
+  for (const c of candidates) {
+    candidateState[c.key] = used.has(c.key)
+      ? "checked"
+      : !draft || draft.excluded.includes(c.key)
+        ? "unchecked"
+        : "new";
+  }
+
+  // 下周计划：没整理过时，放进本周没做完的事
+  const unfinished = candidates
+    .filter((c) => !c.fromPlan && !c.done)
+    .map((c) => ({ id: c.key, text: `继续${withoutContinue(c.text)}`, from: c.key }));
+  const plan = draft ? draft.plan : unfinished;
+  const inPlan = new Set(plan.map((p) => p.from).filter(Boolean));
+  const planSuggestions = [
+    ...unfinished,
+    ...lastPlan
+      .filter((p) => !doneLastPlan.includes(p.id))
+      .map((p) => ({ id: planKey(p.id), text: p.text, from: planKey(p.id) })),
+  ].filter((p) => !inPlan.has(p.from));
 
   return {
     week: isoWeek(start),
@@ -344,12 +484,118 @@ export function buildWeekly(data: WorkData, date: string): WeeklyReport {
     workDays: days.length,
     hours: days.reduce((s, d) => s + d.hours, 0),
     days,
-    summary: fields.summary ?? autoSummary,
-    plan: fields.plan ?? autoPlan,
-    autoSummary,
-    autoPlan,
+    candidates,
+    candidateState,
+    items,
+    plan,
+    planSuggestions,
+    lastPlan,
+    doneLastPlan,
+    curated: !!draft,
+    summaryText: items.map((it, i) => `${i + 1}. ${it.text}`).join("\n"),
+    planText: plan.map((p, i) => `${i + 1}. ${p.text}`).join("\n"),
     logCount: logs.length,
   };
+}
+
+/* ---------- 人工整理周报的操作（都返回新的草稿） ---------- */
+
+const newId = () => Math.random().toString(36).slice(2, 10);
+
+/** 从当前显示的内容开始整理 */
+export const draftOf = (r: WeeklyReport): WeeklyDraft => ({
+  items: r.items,
+  excluded: Object.entries(r.candidateState)
+    .filter(([, s]) => s !== "checked")
+    .map(([k]) => k),
+  plan: r.plan,
+  doneLastPlan: r.doneLastPlan,
+});
+
+export const draftOps = {
+  /** 勾选或取消勾选一个候选 */
+  toggle(d: WeeklyDraft, c: Candidate, on: boolean): WeeklyDraft {
+    if (on) {
+      return {
+        ...d,
+        items: [...d.items, { id: newId(), text: c.text, from: [c.key] }],
+        excluded: d.excluded.filter((k) => k !== c.key),
+      };
+    }
+    return {
+      ...d,
+      items: d.items
+        .map((it) => ({ ...it, from: it.from.filter((k) => k !== c.key) }))
+        .filter((it, i) => !d.items[i].from.length || it.from.length),
+      excluded: [...d.excluded, c.key],
+    };
+  },
+  /** 把几条合成一条，放在第一条的位置 */
+  merge(d: WeeklyDraft, ids: string[], text: string): WeeklyDraft {
+    const picked = d.items.filter((it) => ids.includes(it.id));
+    if (picked.length < 2) return d;
+    const merged = { id: newId(), text, from: [...new Set(picked.flatMap((it) => it.from))] };
+    const at = d.items.findIndex((it) => ids.includes(it.id));
+    const rest = d.items.filter((it) => !ids.includes(it.id));
+    rest.splice(at, 0, merged);
+    return { ...d, items: rest };
+  },
+  /** 把合并的一条拆回原来的几条 */
+  split(d: WeeklyDraft, id: string, textOf: (key: string) => string): WeeklyDraft {
+    const at = d.items.findIndex((it) => it.id === id);
+    if (at < 0 || d.items[at].from.length < 2) return d;
+    const parts = d.items[at].from.map((k) => ({ id: newId(), text: textOf(k), from: [k] }));
+    return { ...d, items: [...d.items.slice(0, at), ...parts, ...d.items.slice(at + 1)] };
+  },
+  edit(d: WeeklyDraft, id: string, text: string): WeeklyDraft {
+    return { ...d, items: d.items.map((it) => (it.id === id ? { ...it, text } : it)) };
+  },
+  /** 删掉一条；它的来源变成「不勾选」 */
+  remove(d: WeeklyDraft, id: string): WeeklyDraft {
+    const it = d.items.find((x) => x.id === id);
+    return { ...d, items: d.items.filter((x) => x.id !== id), excluded: [...d.excluded, ...(it?.from ?? [])] };
+  },
+  add(d: WeeklyDraft, text: string): WeeklyDraft {
+    return { ...d, items: [...d.items, { id: newId(), text, from: [] }] };
+  },
+  move(d: WeeklyDraft, id: string, delta: number): WeeklyDraft {
+    return { ...d, items: moveBy(d.items, id, delta) };
+  },
+  /** 上周计划里的一条打勾 / 取消：打勾的写进本周总结 */
+  doneLast(d: WeeklyDraft, p: PlanItem, done: boolean): WeeklyDraft {
+    const key = planKey(p.id);
+    if (done) {
+      return {
+        ...d,
+        doneLastPlan: [...new Set([...d.doneLastPlan, p.id])],
+        items: [{ id: newId(), text: withoutContinue(p.text), from: [key] }, ...d.items],
+        excluded: d.excluded.filter((k) => k !== key),
+      };
+    }
+    const next = draftOps.toggle(d, { key } as Candidate, false);
+    return { ...next, doneLastPlan: d.doneLastPlan.filter((id) => id !== p.id), excluded: d.excluded };
+  },
+  planAdd(d: WeeklyDraft, text: string, from?: string): WeeklyDraft {
+    return { ...d, plan: [...d.plan, { id: newId(), text, ...(from ? { from } : {}) }] };
+  },
+  planEdit(d: WeeklyDraft, id: string, text: string): WeeklyDraft {
+    return { ...d, plan: d.plan.map((p) => (p.id === id ? { ...p, text } : p)) };
+  },
+  planRemove(d: WeeklyDraft, id: string): WeeklyDraft {
+    return { ...d, plan: d.plan.filter((p) => p.id !== id) };
+  },
+  planMove(d: WeeklyDraft, id: string, delta: number): WeeklyDraft {
+    return { ...d, plan: moveBy(d.plan, id, delta) };
+  },
+};
+
+function moveBy<T extends { id: string }>(list: T[], id: string, delta: number): T[] {
+  const i = list.findIndex((x) => x.id === id);
+  const j = i + delta;
+  if (i < 0 || j < 0 || j >= list.length) return list;
+  const next = [...list];
+  next.splice(j, 0, ...next.splice(i, 1));
+  return next;
 }
 
 /** 整张日报的纯文本，方便发到微信、钉钉 */
@@ -373,9 +619,9 @@ export function weeklyText(r: WeeklyReport): string {
     `工作 ${r.workDays} 天，共 ${r.hours} 小时`,
     "",
     "本周总结：",
-    r.summary,
+    r.summaryText,
   ];
-  if (r.plan.trim()) lines.push("", "下周计划：", r.plan);
+  if (r.planText) lines.push("", "下周计划：", r.planText);
   return lines.join("\n");
 }
 

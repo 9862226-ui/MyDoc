@@ -151,7 +151,7 @@ export function WorkHistory({
                         <p className="text-xs text-muted">
                           工作 {r.workDays} 天 · {r.logCount} 条 · {r.hours} 小时
                         </p>
-                        <p className="line-clamp-3 text-[13px] leading-5 whitespace-pre-line text-fg/85">{r.summary}</p>
+                        <p className="line-clamp-3 text-[13px] leading-5 whitespace-pre-line text-fg/85">{r.summaryText}</p>
                       </>
                     ) : (
                       <p className="text-xs text-faint">这周还没有记录</p>

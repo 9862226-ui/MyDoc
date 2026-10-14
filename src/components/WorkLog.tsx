@@ -15,9 +15,9 @@ import {
   Trash2,
 } from "lucide-react";
 import NextLink from "next/link";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR, { mutate as revalidate } from "swr";
-import { api, copyText, readLocal, writeLocal } from "@/lib/client";
+import { api, readLocal, writeLocal } from "@/lib/client";
 import { localDate } from "@/lib/format";
 import {
   buildDaily,
@@ -29,15 +29,15 @@ import {
   splitEntries,
   weekdayLabel,
   weekStart,
-  weeklyText,
   type DailyReport,
   type Period,
-  type WeeklyReport,
   type WorkData,
   type WorkLog,
   type WorkProject,
 } from "@/lib/worklog";
 import { LastResult } from "./settings-ui";
+import { CopyCell, ReportCard, useCopy } from "./work-ui";
+import { WeeklyEditor } from "./WeeklyEditor";
 import { WorkCalendar } from "./WorkCalendar";
 import { WorkHistory } from "./WorkHistory";
 import {
@@ -74,16 +74,6 @@ const PERIODS: { value: Period; label: string }[] = [
 ];
 
 const mmdd = (date: string) => `${Number(date.slice(5, 7))}月${Number(date.slice(8))}日`;
-
-/** 复制并提示 */
-function useCopy() {
-  const ui = useUI();
-  return async (label: string, value: string) => {
-    if (!value.trim()) return ui.toast(`「${label}」是空的`, { kind: "info" });
-    const ok = await copyText(value);
-    ui.toast(ok ? `已复制「${label}」` : "复制失败，请手动选择文字复制", { kind: ok ? "ok" : "error" });
-  };
-}
 
 export function WorkView() {
   const ui = useUI();
@@ -223,7 +213,7 @@ export function WorkView() {
           {kind === "daily" ? (
             <DailyCard report={daily} date={date} run={run} />
           ) : (
-            <WeeklyCard report={weekly} date={date} run={run} />
+            <WeeklyEditor data={data} date={date} onSaved={() => void Promise.all([mutate(), refreshWork()])} />
           )}
         </div>
       )}
@@ -523,42 +513,6 @@ function LogRow({
 
 /* ---------- 日报、周报 ---------- */
 
-/** 一个可以复制的字段，样子接近公司系统里的一格 */
-function CopyCell({
-  label,
-  value,
-  wide,
-  mono,
-}: {
-  label: string;
-  value: string | number;
-  wide?: boolean;
-  mono?: boolean;
-}) {
-  const copy = useCopy();
-  const text = String(value);
-  return (
-    <div className={cx("group/cell min-w-0", wide && "col-span-full")}>
-      <div className="text-xs text-faint">{label}</div>
-      <button
-        type="button"
-        onClick={() => void copy(label, text)}
-        title="点击复制"
-        className={cx(
-          "-mx-1.5 mt-0.5 flex w-[calc(100%+12px)] cursor-pointer items-start gap-1.5 rounded px-1.5 py-0.5 text-left hover:bg-hover",
-          mono && "tabular-nums",
-        )}
-      >
-        <span className={cx("min-w-0 flex-1 break-words", !text && "text-faint")}>{text || "—"}</span>
-        <Copy
-          size={13}
-          className="mt-1 shrink-0 text-icon opacity-0 group-hover/cell:opacity-100 pointer-coarse:opacity-60"
-        />
-      </button>
-    </div>
-  );
-}
-
 /** 可编辑的总结：自动生成，改过之后保存，可以恢复自动生成 */
 function SummaryField({
   label,
@@ -612,34 +566,6 @@ function SummaryField({
         className="leading-6"
       />
     </div>
-  );
-}
-
-function ReportCard({
-  title,
-  subtitle,
-  actions,
-  children,
-}: {
-  title: string;
-  subtitle: string;
-  actions: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <section
-      aria-label={title}
-      className="flex min-w-0 flex-col gap-5 rounded-xl border border-line bg-surface p-4 md:p-5"
-    >
-      <div className="flex flex-wrap items-start gap-3">
-        <div className="min-w-0 flex-1">
-          <h2 className="text-base leading-6 font-semibold">{title}</h2>
-          <p className="mt-0.5 text-[13px] text-muted">{subtitle}</p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">{actions}</div>
-      </div>
-      {children}
-    </section>
   );
 }
 
@@ -728,77 +654,6 @@ function DailyCard({
         auto={r.autoPmSummary}
         onSave={(v) => run(() => saveFields("daily", date, { pmSummary: v }))}
       />
-    </ReportCard>
-  );
-}
-
-function WeeklyCard({
-  report: r,
-  date,
-  run,
-}: {
-  report: WeeklyReport;
-  date: string;
-  run: (fn: () => Promise<unknown>) => Promise<void>;
-}) {
-  const copy = useCopy();
-  const ai = useAiPolish("weekly", date, run);
-  return (
-    <ReportCard
-      title="员工周报"
-      subtitle={r.logCount ? `${r.logCount} 条记录 · 点任意一格复制` : "这一周还没有记录"}
-      actions={
-        <>
-          <Button size="sm" onClick={() => void ai.polish()} loading={ai.busy} disabled={!r.logCount}>
-            {!ai.busy && <Sparkles size={14} />}
-            AI 整理
-          </Button>
-          <Button size="sm" onClick={() => void copy("整张周报", weeklyText(r))} disabled={!r.logCount}>
-            <Copy size={14} />
-            复制全文
-          </Button>
-        </>
-      }
-    >
-      <div className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-lg bg-field px-4 py-3 sm:grid-cols-4">
-        <CopyCell label="周次" value={r.week} mono />
-        <CopyCell label="周工作天数" value={r.workDays} mono />
-        <CopyCell label="起始日期" value={r.start} mono />
-        <CopyCell label="结束日期" value={r.end} mono />
-      </div>
-
-      <SummaryField
-        label="本周总结"
-        value={r.summary}
-        auto={r.autoSummary}
-        onSave={(v) => run(() => saveFields("weekly", date, { summary: v }))}
-      />
-      <SummaryField
-        label="下周计划"
-        value={r.plan}
-        auto={r.autoPlan}
-        onSave={(v) => run(() => saveFields("weekly", date, { plan: v }))}
-      />
-
-      {r.days.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <h3 className="text-[13px] font-medium">周报明细</h3>
-          <div className="overflow-hidden rounded-lg border border-line">
-            {r.days.map((d) => (
-              <div
-                key={d.date}
-                className="grid grid-cols-[7.5rem_3.5rem_3.5rem_minmax(0,1fr)] gap-x-5 gap-y-2 border-b border-line px-4 py-3 last:border-b-0"
-              >
-                <CopyCell label="工作日期" value={d.date} mono />
-                <CopyCell label="周几" value={d.weekday} />
-                <CopyCell label="工时(h)" value={d.hours} mono />
-                <CopyCell label="所属项目名称" value={d.projectName} />
-                <CopyCell label="工作内容描述" value={d.content} wide />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </ReportCard>
   );
 }

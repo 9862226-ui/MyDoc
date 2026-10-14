@@ -56,8 +56,8 @@ export function remindMessage(kind: RemindKind, data: WorkData, date: string, si
     else if (!withReport) both(`这周工作 ${r.workDays} 天，记了 ${r.logCount} 条，周报已经整理好了。`);
     else {
       both(`这周工作 ${r.workDays} 天，记了 ${r.logCount} 条，周报已经整理好，可以直接复制：`);
-      section("本周总结", r.summary);
-      section("下周计划", r.plan);
+      section("本周总结", r.summaryText);
+      section("下周计划", r.planText);
     }
   }
   const url = link(siteUrl);

@@ -313,11 +313,19 @@ export const workLogCreateSchema = z.object({
 export const workLogPatchSchema = z.object(workLogFields).partial();
 
 const reportText = z.string().max(10000, "内容太长了").nullable().optional();
+const draftText = z.string().trim().min(1, "内容不能为空").max(2000, "内容太长了");
+const draftId = z.string().max(300);
+const weeklyDraft = z.object({
+  items: z.array(z.object({ id: draftId, text: draftText, from: z.array(draftId).max(200) })).max(200),
+  excluded: z.array(draftId).max(500),
+  plan: z.array(z.object({ id: draftId, text: draftText, from: draftId.optional() })).max(100),
+  doneLastPlan: z.array(draftId).max(100),
+});
 
 export const workReportSchema = z.object({
   kind: z.enum(["daily", "weekly"]),
   key: workDate,
-  fields: z.object({ amSummary: reportText, pmSummary: reportText, summary: reportText, plan: reportText }),
+  fields: z.object({ amSummary: reportText, pmSummary: reportText, draft: weeklyDraft.nullable().optional() }),
 });
 
 const clock = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "时间格式不正确");
@@ -339,4 +347,4 @@ export const workSettingsSchema = z
 
 export const workRemindTestSchema = z.object({ kind: z.enum(["daily", "weekly"]) });
 
-export const workAiSchema = z.object({ kind: z.enum(["daily", "weekly"]), date: workDate });
+export const workAiSchema = z.object({ kind: z.literal("daily").default("daily"), date: workDate });
