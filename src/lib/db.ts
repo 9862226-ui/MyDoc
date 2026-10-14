@@ -168,6 +168,8 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX idx_meetings_date ON meetings(date);
   `,
+  // 工作记录的明细：一句话的工作内容进日报，明细（Markdown）只留在记录里
+  `ALTER TABLE work_logs ADD COLUMN detail TEXT NOT NULL DEFAULT '';`,
 ];
 
 export function migrate(db: DB): void {

@@ -124,6 +124,7 @@ interface LogRow {
   period: string;
   project_id: number | null;
   content: string;
+  detail: string;
   hours: number | null;
   done: number;
   source: string;
@@ -137,6 +138,7 @@ const toLog = (r: LogRow): WorkLog => ({
   period: r.period === "pm" ? "pm" : "am",
   projectId: r.project_id,
   content: r.content,
+  detail: r.detail,
   hours: r.hours,
   done: !!r.done,
   source: r.source,
@@ -149,6 +151,7 @@ export interface WorkLogInput {
   period: Period;
   projectId: number | null;
   content: string;
+  detail?: string;
   hours: number | null;
   done: boolean;
 }
@@ -175,14 +178,25 @@ function assertProject(db: DB, projectId: number | null): void {
 
 export function createWorkLogs(db: DB, inputs: WorkLogInput[], source = "web"): WorkLog[] {
   const stmt = db.prepare(
-    `INSERT INTO work_logs (date, period, project_id, content, hours, done, source, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO work_logs (date, period, project_id, content, detail, hours, done, source, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   return db.transaction(() =>
     inputs.map((i) => {
       assertProject(db, i.projectId);
       const t = now();
-      const r = stmt.run(i.date, i.period, i.projectId, i.content, i.hours, i.done ? 1 : 0, source, t, t);
+      const r = stmt.run(
+        i.date,
+        i.period,
+        i.projectId,
+        i.content,
+        i.detail ?? "",
+        i.hours,
+        i.done ? 1 : 0,
+        source,
+        t,
+        t,
+      );
       return getWorkLog(db, Number(r.lastInsertRowid));
     }),
   )();
@@ -192,8 +206,8 @@ export function updateWorkLog(db: DB, id: number, patch: Partial<WorkLogInput>):
   const l = { ...getWorkLog(db, id), ...patch };
   if (patch.projectId !== undefined) assertProject(db, l.projectId);
   db.prepare(
-    "UPDATE work_logs SET date = ?, period = ?, project_id = ?, content = ?, hours = ?, done = ?, updated_at = ? WHERE id = ?",
-  ).run(l.date, l.period, l.projectId, l.content, l.hours, l.done ? 1 : 0, now(), id);
+    "UPDATE work_logs SET date = ?, period = ?, project_id = ?, content = ?, detail = ?, hours = ?, done = ?, updated_at = ? WHERE id = ?",
+  ).run(l.date, l.period, l.projectId, l.content, l.detail, l.hours, l.done ? 1 : 0, now(), id);
   return getWorkLog(db, id);
 }
 
@@ -304,6 +318,8 @@ export interface WorkBackup {
     period: Period;
     project: string | null;
     content: string;
+    /** 旧版本的备份里没有 */
+    detail?: string;
     hours: number | null;
     done: boolean;
     source: string;
@@ -345,6 +361,7 @@ export function exportWork(db: DB): WorkBackup {
       period: l.period,
       project: name(l.projectId),
       content: l.content,
+      detail: l.detail,
       hours: l.hours,
       done: l.done,
       source: l.source,
@@ -382,14 +399,25 @@ export function importWork(db: DB, w: WorkBackup): number {
     }
     const exists = db.prepare("SELECT 1 FROM work_logs WHERE date = ? AND content = ? AND project_id IS ?");
     const insert = db.prepare(
-      `INSERT INTO work_logs (date, period, project_id, content, hours, done, source, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO work_logs (date, period, project_id, content, detail, hours, done, source, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     let added = 0;
     for (const l of w.logs) {
       const projectId = l.project === null ? null : (ids.get(l.project) ?? null);
       if (exists.get(l.date, l.content, projectId)) continue;
-      insert.run(l.date, l.period, projectId, l.content, l.hours, l.done ? 1 : 0, l.source, l.createdAt, now());
+      insert.run(
+        l.date,
+        l.period,
+        projectId,
+        l.content,
+        l.detail ?? "",
+        l.hours,
+        l.done ? 1 : 0,
+        l.source,
+        l.createdAt,
+        now(),
+      );
       added++;
     }
     const hasReport = db.prepare("SELECT 1 FROM work_reports WHERE kind = ? AND period_key = ?");

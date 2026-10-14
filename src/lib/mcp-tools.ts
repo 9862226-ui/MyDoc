@@ -537,6 +537,11 @@ export const TOOLS: Tool[] = [
       "一次做了几件事就调用几次或在 contents 里传多条。",
     input: z.object({
       contents: z.array(z.string().trim().min(1).max(2000)).min(1).max(20).describe("工作内容，每条一句话"),
+      detail: z
+        .string()
+        .max(20000)
+        .optional()
+        .describe("明细（Markdown，可选）：过程、原因、改了哪些地方等，不进日报；只在 contents 只有一条时使用"),
       project: z
         .union([z.number().int(), z.string().trim().min(1)])
         .optional()
@@ -569,6 +574,7 @@ export const TOOLS: Tool[] = [
           period: a.period ?? (now.hour < 12 ? "am" : "pm"),
           projectId,
           content,
+          detail: a.contents.length === 1 ? (a.detail ?? "") : "",
           hours: a.hours ?? null,
           done: a.done ?? true,
         })),
@@ -634,6 +640,7 @@ function workLogOut(l: WorkLog, db: DB, projects = wr.listWorkProjects(db)) {
     period: l.period,
     project: projects.find((p) => p.id === l.projectId)?.name ?? null,
     content: l.content,
+    detail: l.detail || undefined,
     hours: l.hours,
     done: l.done,
   };

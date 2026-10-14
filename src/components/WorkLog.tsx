@@ -21,10 +21,11 @@ import {
 } from "lucide-react";
 import NextLink from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { api, readLocal, writeLocal } from "@/lib/client";
 import { localDate } from "@/lib/format";
+import { toggleTask } from "@/lib/md-edit";
 import {
   buildDaily,
   buildWeekly,
@@ -41,7 +42,8 @@ import {
   type WorkLog,
   type WorkProject,
 } from "@/lib/worklog";
-import { MarkdownEditor } from "./MarkdownEditor";
+import { Markdown } from "./Markdown";
+import { clearDraft, MarkdownEditor } from "./MarkdownEditor";
 import { LastResult } from "./settings-ui";
 import {
   CopyCell,
@@ -111,12 +113,12 @@ export function WorkView() {
   const today = localDate();
 
   useEffect(() => {
+    setFocus(readLocal("mydoc.workFocus", false));
     // 从搜索结果跳过来时直接打开那一天，不恢复上次的标签页
     if (new URLSearchParams(window.location.search).get("date")) return;
     const saved = readLocal<Kind>("mydoc.workTab", "daily");
     if (saved === "weekly" || saved === "calendar") setKind(saved);
     if (readLocal<string>("mydoc.workDailyView", "day") === "list") setDailyView("list");
-    setFocus(readLocal("mydoc.workFocus", false));
   }, []);
 
   const run = async (fn: () => Promise<unknown>) => {
@@ -273,7 +275,14 @@ export function WorkView() {
               <Composer
                 data={data}
                 date={date}
-                onAdd={(body) => run(() => api("/api/work/logs", { body }))}
+                onAdd={async (body) => {
+                  let ok = false;
+                  await run(async () => {
+                    await api("/api/work/logs", { body });
+                    ok = true;
+                  });
+                  return ok;
+                }}
                 onManageProjects={() => setProjectsOpen(true)}
               />
               <LogList data={data} kind={kind} date={date} run={run} mutate={mutate} />
@@ -297,6 +306,8 @@ export function WorkView() {
 
 /* ---------- 记一笔 ---------- */
 
+const DETAIL_DRAFT = "work-detail";
+
 function Composer({
   data,
   date,
@@ -305,10 +316,11 @@ function Composer({
 }: {
   data: WorkData;
   date: string;
-  onAdd: (body: object) => Promise<void>;
+  onAdd: (body: object) => Promise<boolean>;
   onManageProjects: () => void;
 }) {
   const [text, setText] = useState("");
+  const [detail, setDetail] = useState("");
   const [period, setPeriod] = useState<Period>("am");
   const [projectId, setProjectId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -323,20 +335,39 @@ function Composer({
   // 记住的项目被删掉时，默认用第一个项目
   const current = projects.some((p) => p.id === projectId) ? projectId : (projects[0]?.id ?? null);
   const entries = splitEntries(text);
+  // 明细只能跟着一条工作内容
+  const tooMany = !!detail.trim() && entries.length > 1;
+  const titleRef = useRef<HTMLTextAreaElement>(null);
+
+  // 工作内容框跟着内容变高
+  useLayoutEffect(() => {
+    const el = titleRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [text]);
 
   const submit = async () => {
-    if (!entries.length || busy) return;
+    if (!entries.length || tooMany || busy) return;
     setBusy(true);
-    await onAdd({ date, period, projectId: current, contents: entries });
-    setBusy(false);
-    setText("");
+    try {
+      // 没加上时保留输入的内容
+      if (!(await onAdd({ date, period, projectId: current, contents: entries, detail }))) return;
+      setText("");
+      setDetail("");
+      clearDraft(DETAIL_DRAFT);
+      titleRef.current?.focus();
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
-    <section aria-label="记一笔" className="rounded-xl border border-line bg-surface p-4">
+    <section aria-label="记一笔" className="rounded-xl border border-line bg-surface px-4 pt-3.5 pb-3">
       <Textarea
         id="work-input"
-        rows={3}
+        ref={titleRef}
+        rows={1}
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
@@ -346,10 +377,25 @@ function Composer({
           }
         }}
         aria-label="工作内容"
-        placeholder={`${date === localDate() ? "今天" : mmdd(date)}做了什么？一行一条，回车添加（Shift + 回车换行）\n例如：修复文件删除后切片未清理的问题`}
-        className="resize-none border-0 px-0 py-0 text-[15px] leading-6 shadow-none hover:border-0 focus:ring-0"
+        placeholder={`${date === localDate() ? "今天" : mmdd(date)}做了什么？一句话，会写进日报（回车添加）`}
+        className="min-h-0 resize-none border-0 px-0 py-0 text-[15px] leading-6 font-medium shadow-none hover:border-0 focus:ring-0"
       />
-      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">
+      <MarkdownEditor
+        bare
+        grow
+        rows={4}
+        value={detail}
+        onChange={setDetail}
+        onSubmit={() => void submit()}
+        draft={DETAIL_DRAFT}
+        aria-label="明细"
+        placeholder={
+          "补充明细（可选）：过程、原因、改了哪些地方、链接…\n只留在这条记录里，不进日报。支持列表、待办，Ctrl + 回车添加"
+        }
+        className="mt-2"
+      />
+      {tooMany && <p className="mt-1 text-xs text-warn-text">写了明细时，一次只能加一条；工作内容里请只写一行</p>}
+      <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-line pt-3">
         {projects.length ? (
           <Select
             aria-label="报工项目"
@@ -399,11 +445,12 @@ function Composer({
         <Button
           variant="primary"
           loading={busy}
-          disabled={!entries.length}
+          disabled={!entries.length || tooMany}
           onClick={() => void submit()}
+          title="回车或 Ctrl + 回车添加"
           className="ml-auto"
         >
-          {entries.length > 1 ? `添加 ${entries.length} 条` : "添加"}
+          {entries.length > 1 && !tooMany ? `添加 ${entries.length} 条` : "添加"}
         </Button>
       </div>
     </section>
@@ -456,6 +503,7 @@ function LogList({
                   period: l.period,
                   projectId: l.projectId,
                   contents: [l.content],
+                  detail: l.detail,
                   hours: l.hours,
                   done: l.done,
                 },
@@ -577,7 +625,23 @@ function LogRow({
           {log.hours !== null && <span>{log.hours} 小时</span>}
           {!log.done && <span className="text-warn-text">未完成</span>}
           {log.source === "mcp" && <span>AI 助手记录</span>}
+          {!log.detail.trim() && (
+            <button
+              type="button"
+              onClick={() => setDialog(true)}
+              className="cursor-pointer opacity-0 group-hover/log:opacity-100 hover:text-fg hover:underline focus-visible:opacity-100 pointer-coarse:hidden"
+            >
+              + 补充明细
+            </button>
+          )}
         </div>
+        {log.detail.trim() && (
+          <LogDetail
+            text={log.detail}
+            onToggleTask={(n) => void onPatch({ detail: toggleTask(log.detail, n) })}
+            onEdit={() => setDialog(true)}
+          />
+        )}
       </div>
       <div className="flex shrink-0 opacity-0 group-hover/log:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
         <IconButton label="修改" size="sm" onClick={() => setDialog(true)}>
@@ -601,7 +665,49 @@ function LogRow({
   );
 }
 
-/** 修改一条记录：内容、项目、日期、上午下午、工时、是否完成 */
+/** 记录下面的明细：太长时先收起，点「展开」看全部；待办可以直接打勾 */
+function LogDetail({
+  text,
+  onToggleTask,
+  onEdit,
+}: {
+  text: string;
+  onToggleTask: (n: number) => void;
+  onEdit: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [long, setLong] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (el && !open) setLong(el.scrollHeight > el.clientHeight + 4);
+  }, [text, open]);
+  return (
+    <div className="mt-1.5 rounded-md border-l-2 border-line-strong bg-field/60 py-1.5 pr-2 pl-3 text-[13px] leading-[1.6]">
+      <div
+        ref={ref}
+        className={cx(
+          !open && "max-h-[8.5rem] overflow-hidden",
+          long && !open && "[mask-image:linear-gradient(to_bottom,black_65%,transparent)]",
+        )}
+      >
+        <Markdown text={text} onToggleTask={onToggleTask} />
+      </div>
+      <div className="mt-1 flex gap-3 text-xs text-faint">
+        {(long || open) && (
+          <button type="button" onClick={() => setOpen(!open)} className="cursor-pointer hover:text-fg">
+            {open ? "收起" : "展开全部"}
+          </button>
+        )}
+        <button type="button" onClick={onEdit} className="cursor-pointer hover:text-fg">
+          修改明细
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** 修改一条记录：内容、明细、项目、日期、上午下午、工时、是否完成 */
 function LogEditDialog({
   open,
   log,
@@ -633,6 +739,8 @@ function LogEditDialog({
     const next: Partial<WorkLog> = {};
     const content = v.content.trim();
     if (content !== log.content) next.content = content;
+    const detail = v.detail.trim() ? v.detail : "";
+    if (detail !== log.detail) next.detail = detail;
     if (v.projectId !== log.projectId) next.projectId = v.projectId;
     if (v.date !== log.date) next.date = v.date;
     if (v.period !== log.period) next.period = v.period;
@@ -645,7 +753,7 @@ function LogEditDialog({
     <Dialog
       open={open}
       onClose={onClose}
-      size="sm"
+      size="lg"
       title="修改记录"
       footer={
         <>
@@ -657,12 +765,23 @@ function LogEditDialog({
       }
     >
       <div className="flex flex-col gap-4">
-        <Field label="工作内容">
+        <Field label="工作内容" hint="一句话，会写进日报">
           <Textarea
-            rows={3}
+            rows={2}
             value={v.content}
             onChange={(e) => setV({ ...v, content: e.target.value })}
             className="leading-6"
+          />
+        </Field>
+        <Field label="明细" hint="过程、原因、改了哪些地方、链接…只留在这条记录里，不进日报" as="div">
+          <MarkdownEditor
+            grow
+            rows={6}
+            value={v.detail}
+            onChange={(detail) => setV({ ...v, detail })}
+            onSubmit={save}
+            aria-label="明细"
+            placeholder="支持列表、待办、加粗、链接，Ctrl + 回车保存"
           />
         </Field>
         <Field label="报工项目">

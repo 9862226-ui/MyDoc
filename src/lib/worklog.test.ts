@@ -45,6 +45,7 @@ const log = (patch: Partial<WorkLog>): WorkLog => ({
   period: "am",
   projectId: 1,
   content: "整理测试文档",
+  detail: "",
   hours: null,
   done: true,
   source: "web",
@@ -388,8 +389,8 @@ describe("日历和周报列表", () => {
     expect(filterLogs(logs, "切片", "all").map((l) => l.content)).toEqual(["修复切片问题"]);
     expect(filterLogs(logs, "", 2)).toHaveLength(1);
     const csv = logsCsv(logs, data([]).projects);
-    expect(csv.split("\r\n")[0]).toBe("日期,周几,时段,项目,工作内容,工时,状态");
-    expect(csv).toContain('2026-10-13,周二,上午,数据平台,"写接口, 联调",,已完成');
+    expect(csv.split("\r\n")[0]).toBe("日期,周几,时段,项目,工作内容,工时,状态,明细");
+    expect(csv).toContain('2026-10-13,周二,上午,数据平台,"写接口, 联调",,已完成,');
   });
 });
 
@@ -450,7 +451,15 @@ describe("JSON 备份里的工作记录", () => {
     const db = openDb(":memory:");
     const p = wr.createWorkProject(db, { name: "智能造价系统", code: "", taskName: "", taskCode: "", archived: false });
     wr.createWorkLogs(db, [
-      { date: "2026-10-12", period: "am", projectId: p.id, content: "写接口", hours: 2, done: true },
+      {
+        date: "2026-10-12",
+        period: "am",
+        projectId: p.id,
+        content: "写接口",
+        detail: "- 加了分页",
+        hours: 2,
+        done: true,
+      },
       { date: "2026-10-12", period: "pm", projectId: null, content: "开会", hours: null, done: false },
     ]);
     wr.setReportFields(db, "daily", "2026-10-12", { submittedAt: "2026-10-12T10:00:00Z" });
@@ -476,6 +485,7 @@ describe("JSON 备份里的工作记录", () => {
       ["写接口", "智能造价系统"],
       ["开会", null],
     ]);
+    expect(data2.logs.map((l) => l.detail)).toEqual(["- 加了分页", ""]);
     expect(data2.reports["daily:2026-10-12"].submittedAt).toBe("2026-10-12T10:00:00Z");
     expect(data2.settings.dailyHours).toBe(7.5);
     expect(listMeetings(db2).map((m) => [m.title, m.notes, m.projectId !== null])).toEqual([["周会", "- [ ] a", true]]);
@@ -497,6 +507,46 @@ describe("搜索工作记录", () => {
     expect(filterLogs(logs, "qp", "all").map((l) => l.content)).toEqual(["修复切片问题"]);
     expect(filterLogs(logs, "qiepian", "all")).toHaveLength(1);
     expect(filterLogs(logs, "接口", "all")).toHaveLength(1);
+  });
+
+  it("明细也能搜到，导出 CSV 时单独一列", () => {
+    const logs = [log({ content: "修复切片问题", detail: "原因：删除时没清理向量" }), log({ content: "写接口" })];
+    expect(filterLogs(logs, "向量", "all").map((l) => l.content)).toEqual(["修复切片问题"]);
+    const csv = logsCsv(logs, []);
+    expect(csv.split("\r\n")[0]).toBe("日期,周几,时段,项目,工作内容,工时,状态,明细");
+    expect(csv).toContain(",原因：删除时没清理向量");
+  });
+
+  it("明细可以修改，旧备份里没有明细也能恢复", () => {
+    const db = openDb(":memory:");
+    const [l] = wr.createWorkLogs(db, [
+      { date: "2026-10-12", period: "am", projectId: null, content: "写接口", hours: null, done: true },
+    ]);
+    expect(l.detail).toBe("");
+    expect(wr.updateWorkLog(db, l.id, { detail: "## 改动\n- 分页" }).detail).toBe("## 改动\n- 分页");
+    const old = backupSchema.parse({
+      app: "mydoc",
+      version: 1,
+      exportedAt: "",
+      groups: [],
+      work: {
+        projects: [],
+        logs: [
+          {
+            date: "2026-10-13",
+            period: "pm",
+            project: null,
+            content: "旧记录",
+            hours: null,
+            done: true,
+            createdAt: "",
+          },
+        ],
+        reports: [],
+        settings: DEFAULT_WORK_SETTINGS,
+      },
+    });
+    expect(old.work!.logs[0].detail).toBe("");
   });
 
   it("全部记录的接口带上拼音（包括项目名）", () => {

@@ -247,6 +247,7 @@ export const backupSchema = z.object({
           period: z.enum(["am", "pm"]),
           project: z.string().nullable(),
           content: z.string().trim().min(1).max(2000),
+          detail: z.string().max(20000).default(""),
           hours: z.number().min(0).max(24).nullable(),
           done: z.boolean(),
           source: z.string().max(20).default("web"),
@@ -343,6 +344,7 @@ const workLogFields = {
   period: z.enum(["am", "pm"]),
   projectId: id.nullable(),
   content: z.string().trim().min(1, "内容不能为空").max(2000, "内容太长了（最多 2000 字）"),
+  detail: z.string().max(20000, "明细太长了（最多 20000 字）"),
   hours: z.number().min(0).max(24, "工时不能超过 24 小时").nullable(),
   done: z.boolean(),
 };
@@ -353,6 +355,8 @@ export const workLogCreateSchema = z.object({
   period: workLogFields.period,
   projectId: workLogFields.projectId.default(null),
   contents: z.array(workLogFields.content).min(1, "内容不能为空").max(50, "一次最多添加 50 条"),
+  /** 明细只能跟着一条内容 */
+  detail: workLogFields.detail.default(""),
   hours: workLogFields.hours.default(null),
   done: workLogFields.done.default(true),
 });

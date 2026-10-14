@@ -12,7 +12,7 @@ import {
   Strikethrough,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { readLocal, writeLocal } from "@/lib/client";
 import { codeOp, enterOp, indentOp, linePrefixOp, linkOp, wrapOp, type EditOp, type LineKind } from "@/lib/md-edit";
 import { Markdown } from "./Markdown";
@@ -48,7 +48,8 @@ const TOOLS: (Tool | "|")[] = [
 /**
  * Markdown 编辑框：工具栏、快捷键（Ctrl+B 加粗、Ctrl+Enter 保存、Tab 缩进）、回车自动接着写列表、
  * 编辑 / 预览切换、草稿自动保存。
- * markdown=false 时不显示工具栏和预览，只保留回车续编号（用于要原样粘贴的日报总结）
+ * markdown=false 时不显示工具栏和预览，只保留回车续编号（用于要原样粘贴的日报总结）。
+ * grow：输入框跟着内容变高（最多大半屏）；bare：不要外框，放在卡片里用
  */
 export function MarkdownEditor({
   value,
@@ -57,6 +58,8 @@ export function MarkdownEditor({
   draft,
   markdown = true,
   rows = 6,
+  grow,
+  bare,
   placeholder,
   autoFocus,
   id,
@@ -72,6 +75,8 @@ export function MarkdownEditor({
   draft?: string;
   markdown?: boolean;
   rows?: number;
+  grow?: boolean;
+  bare?: boolean;
   placeholder?: string;
   autoFocus?: boolean;
   id?: string;
@@ -83,6 +88,14 @@ export function MarkdownEditor({
   const ref = useRef<HTMLTextAreaElement>(null);
   const [preview, setPreview] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
+
+  // 跟着内容变高；超过大半屏后在框里滚动
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!grow || !el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight + 2}px`;
+  }, [grow, value, preview]);
 
   // 打开时如果有上次没保存的草稿，提示恢复
   useEffect(() => {
@@ -156,8 +169,10 @@ export function MarkdownEditor({
   return (
     <div
       className={cx(
-        "flex flex-col overflow-hidden rounded-md border bg-surface transition-[border-color,box-shadow] focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/15",
-        invalid ? "border-danger" : "border-control hover:border-accent/60",
+        "flex flex-col overflow-hidden bg-surface",
+        !bare &&
+          "rounded-md border transition-[border-color,box-shadow] focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/15",
+        !bare && (invalid ? "border-danger" : "border-control hover:border-accent/60"),
         className,
       )}
     >
@@ -188,7 +203,12 @@ export function MarkdownEditor({
         </div>
       )}
       {markdown && (
-        <div className="flex items-center gap-0.5 overflow-x-auto border-b border-line px-1.5 py-1">
+        <div
+          className={cx(
+            "flex items-center gap-0.5 overflow-x-auto border-b border-line py-1",
+            bare ? "px-0" : "px-1.5",
+          )}
+        >
           {TOOLS.map((t, i) =>
             t === "|" ? (
               <span key={i} aria-hidden className="mx-1 h-4 w-px shrink-0 bg-line-strong" />
@@ -198,6 +218,8 @@ export function MarkdownEditor({
                 type="button"
                 title={t.keys ? `${t.label}（${t.keys}）` : t.label}
                 aria-label={t.label}
+                // 有快捷键，Tab 键直接跳进输入框
+                tabIndex={-1}
                 // 按下时不让文本框失去焦点，保住选中的文字
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => tool(t)}
@@ -213,6 +235,7 @@ export function MarkdownEditor({
                 key={label}
                 type="button"
                 role="tab"
+                tabIndex={-1}
                 aria-selected={preview === (i === 1)}
                 onClick={() => setPreview(i === 1)}
                 className={cx(
@@ -229,7 +252,10 @@ export function MarkdownEditor({
         </div>
       )}
       {preview ? (
-        <div className="overflow-y-auto px-2.5 py-2" style={{ minHeight: `${rows * 1.5 + 1}rem` }}>
+        <div
+          className={cx("overflow-y-auto py-2", bare ? "px-0" : "px-2.5", grow && "max-h-[60vh]")}
+          style={{ minHeight: `${rows * 1.5 + 1}rem` }}
+        >
           {value.trim() ? <Markdown text={value} /> : <p className="text-faint">没有内容</p>}
         </div>
       ) : (
@@ -246,10 +272,14 @@ export function MarkdownEditor({
           onChange={(e) => change(e.target.value)}
           onKeyDown={onKeyDown}
           onBlur={onBlur}
-          className="w-full resize-y bg-transparent px-2.5 py-2 leading-6 text-fg outline-none placeholder:text-icon"
+          className={cx(
+            "w-full bg-transparent py-2 leading-6 text-fg outline-none placeholder:text-icon",
+            bare ? "px-0" : "px-2.5",
+            grow ? "max-h-[60vh] resize-none" : "resize-y",
+          )}
         />
       )}
-      {markdown && !preview && (
+      {markdown && !preview && !bare && (
         <div className="flex items-center gap-3 px-2.5 pb-1.5 text-[11px] text-faint max-sm:hidden">
           <span>支持 Markdown</span>
           <span>回车自动接着写列表</span>

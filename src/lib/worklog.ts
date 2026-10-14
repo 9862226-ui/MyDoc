@@ -27,6 +27,8 @@ export interface WorkLog {
   period: Period;
   projectId: number | null;
   content: string;
+  /** 明细（Markdown）：过程、原因、链接等，不进日报周报 */
+  detail: string;
   /** 不填时按每天的正常工时平均分 */
   hours: number | null;
   /** 没做完的会放进「下周计划」 */
@@ -749,7 +751,10 @@ export function filterLogs(logs: WorkLog[], q: string, projectId: number | null 
   const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   return logs
     .filter((l) => projectId === "all" || l.projectId === projectId)
-    .filter((l) => words.every((w) => l.content.toLowerCase().includes(w) || pinyinMatch(w, l.py)))
+    .filter((l) => {
+      const text = `${l.content}\n${l.detail}`.toLowerCase();
+      return words.every((w) => text.includes(w) || pinyinMatch(w, l.py));
+    })
     .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
 }
 
@@ -771,8 +776,9 @@ export function logsCsv(logs: WorkLog[], projects: WorkProject[]): string {
       l.content,
       l.hours ?? "",
       l.done ? "已完成" : "未完成",
+      l.detail,
     ]);
-  return [["日期", "周几", "时段", "项目", "工作内容", "工时", "状态"], ...rows]
+  return [["日期", "周几", "时段", "项目", "工作内容", "工时", "状态", "明细"], ...rows]
     .map((r) => r.map(csvCell).join(","))
     .join("\r\n");
 }
