@@ -1,11 +1,13 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { refreshData } from "@/lib/client";
+import { GO_KEYS } from "@/lib/commands";
 import { parseShareText } from "@/lib/share-text";
 import type { Group, Link, Project, Reminder, Snippet } from "@/lib/types";
 import { CommandPalette } from "./CommandPalette";
+import { runCommand } from "./commands";
 import { AiOrganizeDialog, autoClassify, useAiSettings } from "./AiOrganize";
 import { AddTagsDialog, ConfirmDialog, GroupDialog, ProjectDialog } from "./dialogs";
 import { HelpDialog } from "./HelpDialog";
@@ -37,6 +39,7 @@ function dialogOpen(): boolean {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [linkDialog, setLinkDialog] = useState<{ open: boolean; link?: Link; init?: LinkInit }>({ open: false });
   const [importDialog, setImportDialog] = useState<{ open: boolean; text?: string }>({ open: false });
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -101,7 +104,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
   uiRef.current = ui;
 
-  // 快捷键：Ctrl/⌘+K 或 / 搜索，N 添加链接
+  // 快捷键：Ctrl/⌘+K 或 / 搜索，N 添加链接，C 记一笔工作，先按 G 再按字母跳到对应页面
+  const goAt = useRef(0);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -111,12 +115,27 @@ export function AppShell({ children }: { children: ReactNode }) {
         return;
       }
       if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target) || document.querySelector("dialog[open]")) return;
+      const key = e.key.toLowerCase();
+      // G 之后 1.5 秒内按的字母
+      if (Date.now() - goAt.current < 1500) {
+        goAt.current = 0;
+        if (GO_KEYS[key]) {
+          e.preventDefault();
+          router.push(GO_KEYS[key]);
+          return;
+        }
+      }
       if (e.key === "/") {
         e.preventDefault();
         setPaletteOpen(true);
-      } else if (e.key === "n" || e.key === "N") {
+      } else if (key === "n") {
         e.preventDefault();
         setLinkDialog({ open: true });
+      } else if (key === "c" && uiRef.current) {
+        e.preventDefault();
+        runCommand("log", { push: router.push, ui: uiRef.current, hasGroups: true });
+      } else if (key === "g") {
+        goAt.current = Date.now();
       }
     };
     // 在页面空白处粘贴链接，直接打开添加窗口

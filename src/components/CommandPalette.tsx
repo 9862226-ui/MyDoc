@@ -4,11 +4,13 @@ import { NotebookPen, Quote, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { copyText, useAppData } from "@/lib/client";
+import { getCommand, matchCommands, QUICK_COMMANDS, type Command } from "@/lib/commands";
 import { plainText } from "@/lib/md-edit";
 import { platformLabel } from "@/lib/platforms";
 import type { Link, Snippet } from "@/lib/types";
 import { pinyinHits, projectIndex, projectPathLabel, search, type ProjectInfo } from "@/lib/view";
 import { filterLogs, weekdayLabel, type WorkLog } from "@/lib/worklog";
+import { COMMAND_ICONS, runCommand } from "./commands";
 import { cx, DocIcon, Kbd, ProjectBadge, useModKey } from "./ui";
 import { useLinkActions, useUI } from "./ui-context";
 import { useWorkAll } from "./WorkCalendar";
@@ -17,7 +19,8 @@ type Item =
   | { type: "link"; link: Link }
   | { type: "project"; info: ProjectInfo }
   | { type: "snippet"; snippet: Snippet }
-  | { type: "work"; log: WorkLog };
+  | { type: "work"; log: WorkLog }
+  | { type: "command"; command: Command };
 type Scope = "all" | "links" | "projects" | "snippets" | "work";
 
 const WORK_LIMIT = 8;
@@ -52,6 +55,35 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     >
       {open && <PaletteBody onClose={onClose} />}
     </dialog>
+  );
+}
+
+/** 一条操作：图标、标题，右边是快捷键 */
+function CommandRow({ command, query }: { command: Command; query: string }) {
+  const [Icon, color] = COMMAND_ICONS[command.group === "跳转" ? "go" : command.id];
+  return (
+    <>
+      <span
+        aria-hidden
+        className="flex size-8 shrink-0 items-center justify-center rounded-md text-white"
+        style={{ background: color }}
+      >
+        <Icon size={16} />
+      </span>
+      <span className="min-w-0 flex-1 truncate">{highlight(command.title, query, command.py)}</span>
+      {command.keys && (
+        <span className="flex shrink-0 items-center gap-1 text-xs text-faint max-sm:hidden">
+          {command.keys.length > 1 && <span>先按</span>}
+          <Kbd>{command.keys[0]}</Kbd>
+          {command.keys.length > 1 && (
+            <>
+              <span>再按</span>
+              <Kbd>{command.keys[1]}</Kbd>
+            </>
+          )}
+        </span>
+      )}
+    </>
   );
 }
 
@@ -120,11 +152,21 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
       const recentIds = new Set(recent.map((l) => l.id));
       const favorites = data.links.filter((l) => l.favorite && !recentIds.has(l.id)).slice(0, 6);
       return [
+        { title: "快捷操作", items: QUICK_COMMANDS.map((id): Item => ({ type: "command", command: getCommand(id) })) },
         { title: "最近访问", items: recent.map((link): Item => ({ type: "link", link })) },
         { title: "收藏", items: favorites.map((link): Item => ({ type: "link", link })) },
       ].filter((s) => s.items.length);
     }
     return [
+      {
+        title: "操作",
+        items:
+          scope === "all"
+            ? matchCommands(query)
+                .slice(0, 6)
+                .map((command): Item => ({ type: "command", command }))
+            : [],
+      },
       {
         title: "项目",
         items:
@@ -162,7 +204,9 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
 
   const choose = (item: Item, copy = false) => {
     onClose();
-    if (item.type === "project") router.push(`/p/${item.info.project.id}`);
+    if (item.type === "command")
+      runCommand(item.command.id, { push: router.push, ui, hasGroups: !!data?.groups.length });
+    else if (item.type === "project") router.push(`/p/${item.info.project.id}`);
     else if (item.type === "work") router.push(`/work?date=${item.log.date}`);
     else if (item.type === "snippet")
       void copyText(item.snippet.content).then((ok) =>
@@ -214,7 +258,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
               setActive(0);
             }
           }}
-          placeholder="搜索文档、项目、标签"
+          placeholder="搜索文档、项目、标签，或输入要做的事，例如「开工」"
           className="h-full min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-icon"
         />
         <button type="button" onClick={onClose} aria-label="关闭搜索" className="cursor-pointer">
@@ -272,7 +316,9 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
                           ? `s${item.snippet.id}`
                           : item.type === "work"
                             ? `w${item.log.id}`
-                            : `p${item.info.project.id}`
+                            : item.type === "command"
+                              ? `c${item.command.id}`
+                              : `p${item.info.project.id}`
                     }
                     type="button"
                     data-index={idx}
@@ -284,7 +330,9 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
                       selected && "bg-field",
                     )}
                   >
-                    {item.type === "link" ? (
+                    {item.type === "command" ? (
+                      <CommandRow command={item.command} query={query} />
+                    ) : item.type === "link" ? (
                       <>
                         <DocIcon url={item.link.url} size={32} />
                         <span className="flex min-w-0 flex-1 flex-col">
@@ -365,7 +413,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
                         </span>
                       </>
                     )}
-                    {selected && (
+                    {selected && item.type !== "command" && (
                       <span className="shrink-0 text-xs text-faint max-sm:hidden">
                         ↵ {item.type === "project" ? "进入" : item.type === "snippet" ? "复制" : "打开"}
                       </span>

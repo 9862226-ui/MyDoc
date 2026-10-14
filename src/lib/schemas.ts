@@ -384,6 +384,34 @@ export const workReportSchema = z.object({
   }),
 });
 
+const planText = z.string().trim().min(1, "内容不能为空").max(2000, "内容太长了（最多 2000 字）");
+const planId = z.string().min(1).max(40);
+
+/** 改某天的计划（开工、打勾、顺延、收工） */
+export const dayPlanOpSchema = z.intersection(
+  z.object({ date: workDate }),
+  z.discriminatedUnion("op", [
+    z.object({
+      op: z.literal("add"),
+      items: z
+        .array(
+          z.object({
+            text: planText,
+            projectId: id.nullable().default(null),
+            source: z.enum(["manual", "carry", "weekly", "unfinished", "meeting", "leftover"]).default("manual"),
+            ref: z.string().max(80).optional(),
+          }),
+        )
+        .min(1)
+        .max(50, "一次最多加 50 条"),
+    }),
+    z.object({ op: z.literal("check"), id: planId, period: z.enum(["am", "pm"]) }),
+    z.object({ op: z.enum(["uncheck", "carry", "drop", "restore", "remove"]), id: planId }),
+    z.object({ op: z.literal("edit"), id: planId, text: planText.optional(), projectId: id.nullable().optional() }),
+    z.object({ op: z.literal("shutdown") }),
+  ]),
+);
+
 const clock = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "时间格式不正确");
 const weekday = z.number().int().min(0).max(6);
 

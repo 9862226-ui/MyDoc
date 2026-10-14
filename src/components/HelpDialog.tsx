@@ -7,8 +7,10 @@ import { Button, Dialog, Kbd, useModKey } from "./ui";
 export function ShortcutList() {
   const mod = useModKey();
   const rows: [string[][], string][] = [
-    [[[mod, "K"], ["/"]], "打开搜索"],
+    [[[mod, "K"], ["/"]], "打开搜索，也可以输入要做的事，例如「开工」「收工」"],
     [[["N"]], "添加链接"],
+    [[["C"]], "记一笔工作"],
+    [[["G", "W"]], "先按 G 再按 W：工作记录（M 会议纪要、H 工作台、I 收件箱、R 到期提醒、S 设置）"],
     [[[mod, "V"]], "在页面空白处粘贴链接或分享文案，直接添加"],
     [[["↑"], ["↓"]], "在搜索结果里上下选择"],
     [[["Enter"]], "打开选中的链接"],

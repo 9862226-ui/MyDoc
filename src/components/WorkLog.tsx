@@ -20,7 +20,7 @@ import {
   Trash2,
 } from "lucide-react";
 import NextLink from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { api, readLocal, writeLocal } from "@/lib/client";
@@ -59,6 +59,7 @@ import { WeeklyEditor } from "./WeeklyEditor";
 import { WorkCalendar } from "./WorkCalendar";
 import { WorkDailyList } from "./WorkDailyList";
 import { WorkHistory } from "./WorkHistory";
+import { DayPlanCard, PlanDialog, ShutdownDialog } from "./WorkPlan";
 import {
   Banner,
   Button,
@@ -101,21 +102,38 @@ export function WorkView() {
   const [dailyView, setDailyView] = useState<"day" | "list">("day");
   // 专注记录：隐藏右边的日报，只留输入框和记录
   const [focus, setFocus] = useState(false);
-  // 从搜索结果跳过来：/work?date=2026-10-12 打开那一天的日报
-  const dateParam = useSearchParams().get("date");
+  // 记一笔时让输入框获得焦点（每次加一）
+  const [captureKey, setCaptureKey] = useState(0);
+  const [planOpen, setPlanOpen] = useState(false);
+  const [shutdownOpen, setShutdownOpen] = useState(false);
+  // 地址参数：?date=2026-10-12 打开那一天的日报（从搜索结果跳过来）；
+  // ?do=capture / plan / shutdown / today / weekly / calendar 是命令面板、快捷键、下班提醒发来的操作。处理完去掉参数
+  const params = useSearchParams();
+  const router = useRouter();
+  const dateParam = params.get("date");
+  const doParam = params.get("do");
   useEffect(() => {
-    if (!dateParam || !/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) return;
-    setDate(dateParam);
-    setKind("daily");
-    setDailyView("day");
-  }, [dateParam]);
+    const day = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : null;
+    if (!day && !doParam) return;
+    setDate(day ?? localDate());
+    if (doParam === "weekly" || doParam === "calendar") {
+      setKind(doParam);
+    } else {
+      setKind("daily");
+      setDailyView("day");
+    }
+    if (doParam === "capture") setCaptureKey((k) => k + 1);
+    if (doParam === "plan") setPlanOpen(true);
+    if (doParam === "shutdown") setShutdownOpen(true);
+    if (doParam) router.replace(day ? `/work?date=${day}` : "/work", { scroll: false });
+  }, [dateParam, doParam]);
   const { data, mutate } = useWork(date);
   const today = localDate();
 
   useEffect(() => {
     setFocus(readLocal("mydoc.workFocus", false));
-    // 从搜索结果跳过来时直接打开那一天，不恢复上次的标签页
-    if (new URLSearchParams(window.location.search).get("date")) return;
+    // 从搜索结果跳过来、或者带着要做的操作时，不恢复上次的标签页
+    if (window.location.search) return;
     const saved = readLocal<Kind>("mydoc.workTab", "daily");
     if (saved === "weekly" || saved === "calendar") setKind(saved);
     if (readLocal<string>("mydoc.workDailyView", "day") === "list") setDailyView("list");
@@ -272,9 +290,17 @@ export function WorkView() {
         >
           {kind === "daily" ? (
             <div className="flex min-w-0 flex-col gap-4">
+              <DayPlanCard
+                date={date}
+                today={today}
+                data={data}
+                onPlan={() => setPlanOpen(true)}
+                onShutdown={() => setShutdownOpen(true)}
+              />
               <Composer
                 data={data}
                 date={date}
+                focusKey={captureKey}
                 onAdd={async (body) => {
                   let ok = false;
                   await run(async () => {
@@ -300,6 +326,10 @@ export function WorkView() {
 
       {data && <ProjectsDialog open={projectsOpen} onClose={() => setProjectsOpen(false)} data={data} run={run} />}
       {data && <RemindDialog open={remindOpen} onClose={() => setRemindOpen(false)} data={data} run={run} />}
+      {data && <PlanDialog open={planOpen} onClose={() => setPlanOpen(false)} date={date} today={today} data={data} />}
+      {data && (
+        <ShutdownDialog open={shutdownOpen} onClose={() => setShutdownOpen(false)} date={date} data={data} run={run} />
+      )}
     </div>
   );
 }
@@ -311,11 +341,14 @@ const DETAIL_DRAFT = "work-detail";
 function Composer({
   data,
   date,
+  focusKey,
   onAdd,
   onManageProjects,
 }: {
   data: WorkData;
   date: string;
+  /** 变了就让输入框获得焦点（快捷键 C、命令面板的「记一笔」） */
+  focusKey: number;
   onAdd: (body: object) => Promise<boolean>;
   onManageProjects: () => void;
 }) {
@@ -338,6 +371,11 @@ function Composer({
   // 明细只能跟着一条工作内容
   const tooMany = !!detail.trim() && entries.length > 1;
   const titleRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (!focusKey) return;
+    titleRef.current?.focus();
+    titleRef.current?.scrollIntoView({ block: "center" });
+  }, [focusKey]);
 
   // 工作内容框跟着内容变高
   useLayoutEffect(() => {

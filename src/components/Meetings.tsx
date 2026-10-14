@@ -13,6 +13,7 @@ import {
   Users,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { api, useAppData } from "@/lib/client";
 import { localDate } from "@/lib/format";
@@ -67,6 +68,15 @@ function MeetingsBody({ today }: { today: string }) {
     window.addEventListener(NEW_MEETING_EVENT, open);
     return () => window.removeEventListener(NEW_MEETING_EVENT, open);
   }, []);
+
+  // 命令面板的「新建会议纪要」：/meetings?do=new
+  const router = useRouter();
+  const doParam = useSearchParams().get("do");
+  useEffect(() => {
+    if (doParam !== "new") return;
+    setMode({ kind: "edit", id: null });
+    router.replace("/meetings", { scroll: false });
+  }, [doParam]);
 
   const shown = useMemo(() => {
     const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);

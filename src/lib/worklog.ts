@@ -3,6 +3,7 @@
  * 这里只有纯函数，浏览器和服务端都能用。
  */
 
+import type { DayPlanItem } from "./dayplan";
 import type { SpecialDay } from "./holidays";
 import { pinyinMatch } from "./view";
 
@@ -94,6 +95,10 @@ export interface DailyFields {
   pmSummary?: string;
   /** 标记为已提交到公司系统的时间 */
   submittedAt?: string;
+  /** 这天的计划（开工时安排） */
+  plan?: DayPlanItem[];
+  /** 收工的时间 */
+  shutdownAt?: string;
 }
 
 export interface WeeklyFields {

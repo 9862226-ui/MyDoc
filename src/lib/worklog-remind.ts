@@ -1,3 +1,4 @@
+import { isPlanDone } from "./dayplan";
 import type { DB } from "./db";
 import { getNotifyConfig, sendMessage, type Message, type Sender } from "./notify";
 import { zonedNow } from "./settings";
@@ -32,7 +33,9 @@ export function isDue(time: string, now: Date): boolean {
   return diff >= 0 && diff <= LATE_MINUTES;
 }
 
-const link = (siteUrl: string) => (siteUrl ? `${siteUrl.replace(/\/+$/, "")}/work` : "");
+/** 日报提醒直接打开「收工」，周报提醒打开周报 */
+const link = (siteUrl: string, kind: RemindKind) =>
+  siteUrl ? `${siteUrl.replace(/\/+$/, "")}/work?do=${kind === "daily" ? "shutdown" : "weekly"}` : "";
 
 export function remindMessage(kind: RemindKind, data: WorkData, date: string, siteUrl: string, withReport: boolean) {
   const md: string[] = [];
@@ -51,6 +54,18 @@ export function remindMessage(kind: RemindKind, data: WorkData, date: string, si
   if (kind === "daily") {
     const r = buildDaily(data, date);
     title = "该写日报了";
+    // 开工时安排了计划的，说一下完成了几件
+    const plan = (data.reports[reportKey("daily", date)]?.plan ?? []).filter(
+      (i) => i.status === "todo" || i.status === "done",
+    );
+    if (plan.length) {
+      const todayLogs = data.logs.filter((l) => l.date === date);
+      const done = plan.filter((i) => isPlanDone(i, todayLogs)).length;
+      note =
+        done < plan.length
+          ? `今天计划 ${plan.length} 件，完成了 ${done} 件；没做完的收工时可以顺延到下一个工作日。`
+          : `今天计划的 ${plan.length} 件都完成了。`;
+    }
     if (!r.logCount) both("今天还没有记录工作，花一分钟记几句，日报马上就能整理好。");
     else if (!withReport) both(`今天记了 ${r.logCount} 条工作，日报已经整理好了。`);
     else {
@@ -79,9 +94,9 @@ export function remindMessage(kind: RemindKind, data: WorkData, date: string, si
     }
   }
   if (note) both(note);
-  const url = link(siteUrl);
+  const url = link(siteUrl, kind);
   if (url) {
-    md.push(`[打开工作记录](${url})`);
+    md.push(kind === "daily" ? `[收工：核对今天、整理日报](${url})` : `[打开周报](${url})`);
     txt.push(url);
   }
   return {

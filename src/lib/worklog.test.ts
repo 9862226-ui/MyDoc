@@ -314,7 +314,8 @@ describe("下班提醒", () => {
     expect(await runWorkRemind(db, at("17:45"), send)).toEqual([]);
     expect(sent.map((m) => m.title)).toEqual(["MyDoc：该交周报了（第 42 周）", "MyDoc：该写日报了"]);
     expect(sent[1].text).toContain("今天还没有记录工作");
-    expect(sent[1].text).toContain("https://doc.example.test/work");
+    expect(sent[1].text).toContain("https://doc.example.test/work?do=shutdown");
+    expect(sent[0].text).toContain("https://doc.example.test/work?do=weekly");
     // 第二天 21:00 已经晚了 3 个多小时，不补发；周六不在提醒日里
     expect(await runWorkRemind(db, at("21:00", "2026-10-15"), send)).toEqual([]);
     expect(await runWorkRemind(db, at("17:40", "2026-10-17"), send)).toEqual([]);
