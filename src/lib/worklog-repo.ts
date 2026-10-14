@@ -1,6 +1,7 @@
 import type { DB } from "./db";
 import { HttpError } from "./errors";
 import type { SpecialDay } from "./holidays";
+import { createMeeting, listMeetings } from "./meeting-repo";
 import { getNotifyConfig } from "./notify";
 import { pinyinIndex } from "./pinyin";
 import { getSetting, setSetting } from "./settings";
@@ -310,6 +311,16 @@ export interface WorkBackup {
   }[];
   reports: { kind: ReportKind; key: string; fields: Record<string, unknown> }[];
   settings: WorkSettings;
+  /** 会议纪要；project 是报工项目名称 */
+  meetings?: {
+    title: string;
+    date: string;
+    project: string | null;
+    attendees: string;
+    source: string;
+    notes: string;
+    createdAt: string;
+  }[];
 }
 
 export function exportWork(db: DB): WorkBackup {
@@ -347,6 +358,15 @@ export function exportWork(db: DB): WorkBackup {
       }
     }),
     settings: getWorkSettings(db),
+    meetings: listMeetings(db).map((m) => ({
+      title: m.title,
+      date: m.date,
+      project: name(m.projectId),
+      attendees: m.attendees,
+      source: m.source,
+      notes: m.notes,
+      createdAt: m.createdAt,
+    })),
   };
 }
 
@@ -377,6 +397,12 @@ export function importWork(db: DB, w: WorkBackup): number {
       if (!hasReport.get(r.kind, r.key)) setReportFields(db, r.kind, r.key, r.fields);
     }
     if (!db.prepare("SELECT 1 FROM settings WHERE key = ?").get(SETTINGS_KEY)) setWorkSettings(db, w.settings);
+    // 会议纪要：同一天同名的跳过
+    const hasMeeting = db.prepare("SELECT 1 FROM meetings WHERE date = ? AND title = ?");
+    for (const m of w.meetings ?? []) {
+      if (hasMeeting.get(m.date, m.title)) continue;
+      createMeeting(db, { ...m, projectId: m.project === null ? null : (ids.get(m.project) ?? null) }, m.createdAt);
+    }
     return added;
   })();
 }

@@ -14,6 +14,7 @@ import {
   Trash2,
   Upload,
   UserRound,
+  Users,
   Folder,
   type LucideIcon,
 } from "lucide-react";
@@ -26,6 +27,7 @@ const ICONS = {
   bell: Bell,
   quote: Quote,
   work: NotebookPen,
+  meeting: Users,
   layers: Layers,
   clock: Clock,
   trash: Trash2,

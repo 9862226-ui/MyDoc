@@ -35,7 +35,8 @@ export interface UI {
   editGroup(group?: Group): void;
   editProject(project?: Project, groupId?: number): void;
   addTagsTo(ids: number[], done?: () => void): void;
-  editReminder(reminder?: Reminder): void;
+  /** 添加或编辑提醒；init 是新建时预先填好的内容（例如从会议待办创建） */
+  editReminder(reminder?: Reminder, init?: { title?: string; note?: string }): void;
   /** 添加或编辑摘录 */
   editSnippet(snippet?: Snippet, init?: { content?: string; sourceUrl?: string; sourceTitle?: string }): void;
   /** 把项目分享成只读链接 */

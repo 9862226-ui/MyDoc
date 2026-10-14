@@ -9,6 +9,8 @@ import {
   Bell,
   CalendarDays,
   List,
+  PanelRightClose,
+  PanelRightOpen,
   Pencil,
   FolderCog,
   NotebookPen,
@@ -41,7 +43,16 @@ import {
 } from "@/lib/worklog";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { LastResult } from "./settings-ui";
-import { CopyCell, refreshWork, ReportCard, StatusBadge, SubmitButton, useCopy, useSubmit } from "./work-ui";
+import {
+  CopyCell,
+  refreshWork,
+  ReportCard,
+  StatusBadge,
+  SubmitButton,
+  useCopy,
+  useSubmit,
+  WorkModuleSwitch,
+} from "./work-ui";
 import { WeeklyEditor } from "./WeeklyEditor";
 import { WorkCalendar } from "./WorkCalendar";
 import { WorkDailyList } from "./WorkDailyList";
@@ -86,6 +97,8 @@ export function WorkView() {
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [remindOpen, setRemindOpen] = useState(false);
   const [dailyView, setDailyView] = useState<"day" | "list">("day");
+  // 专注记录：隐藏右边的日报，只留输入框和记录
+  const [focus, setFocus] = useState(false);
   // 从搜索结果跳过来：/work?date=2026-10-12 打开那一天的日报
   const dateParam = useSearchParams().get("date");
   useEffect(() => {
@@ -103,6 +116,7 @@ export function WorkView() {
     const saved = readLocal<Kind>("mydoc.workTab", "daily");
     if (saved === "weekly" || saved === "calendar") setKind(saved);
     if (readLocal<string>("mydoc.workDailyView", "day") === "list") setDailyView("list");
+    setFocus(readLocal("mydoc.workFocus", false));
   }, []);
 
   const run = async (fn: () => Promise<unknown>) => {
@@ -128,6 +142,7 @@ export function WorkView() {
 
   return (
     <div className="mx-auto flex w-full max-w-[1240px] flex-col gap-5 px-4 pt-4 pb-12 md:px-8 md:pt-6">
+      <WorkModuleSwitch current="work" />
       <div className="flex items-start gap-4">
         <span
           aria-hidden
@@ -187,9 +202,26 @@ export function WorkView() {
               { value: "day", label: "单日", icon: <CalendarDays size={15} /> },
               { value: "list", label: "列表", icon: <List size={15} /> },
             ]}
-            className="mb-1.5 md:mr-auto md:ml-2"
+            className="mb-1.5 md:ml-2"
           />
         )}
+        {kind === "daily" && dailyView === "day" && (
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-pressed={focus}
+            title={focus ? "显示右边的日报" : "隐藏日报，专心记录"}
+            onClick={() => {
+              setFocus(!focus);
+              writeLocal("mydoc.workFocus", !focus);
+            }}
+            className={cx("mb-1.5", focus && "bg-accent-soft text-accent-text")}
+          >
+            {focus ? <PanelRightOpen size={15} /> : <PanelRightClose size={15} />}
+            {focus ? "显示日报" : "专注记录"}
+          </Button>
+        )}
+        <span className="flex-1 max-md:hidden" />
         {kind !== "calendar" && !(kind === "daily" && dailyView === "list") && (
           <div className="flex items-center gap-1 pb-1.5 max-md:w-full max-md:justify-between">
             <IconButton label={kind === "daily" ? "前一天" : "上一周"} onClick={() => setDate(shiftDate(date, -step))}>
@@ -230,7 +262,12 @@ export function WorkView() {
           <Skeleton className="h-96 rounded-xl" />
         </div>
       ) : (
-        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+        <div
+          className={cx(
+            "grid items-start gap-5",
+            kind === "daily" && focus ? "mx-auto w-full max-w-[760px]" : "lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]",
+          )}
+        >
           {kind === "daily" ? (
             <div className="flex min-w-0 flex-col gap-4">
               <Composer
@@ -245,7 +282,7 @@ export function WorkView() {
             <WorkHistory selected={weekStart(date)} today={today} onSelectWeek={setDate} onOpenDay={openDay} />
           )}
           {kind === "daily" ? (
-            <DailyCard report={daily} date={date} run={run} />
+            !focus && <DailyCard report={daily} date={date} run={run} />
           ) : (
             <WeeklyEditor data={data} date={date} onSaved={() => void Promise.all([mutate(), refreshWork()])} />
           )}

@@ -10,6 +10,7 @@ import { NavIcon, type NavIconName } from "./nav-icons";
 import { useCreateMenu } from "./Sidebar";
 import { Avatar, cx, IconButton, Kbd, Menu, useModKey } from "./ui";
 import { useUI } from "./ui-context";
+import { NEW_MEETING_EVENT } from "./work-ui";
 
 interface PageTitle {
   title: string;
@@ -29,6 +30,7 @@ const SIMPLE_TITLES: Record<string, PageTitle> = {
   "/reminders": { title: "到期提醒", parent: "/projects" },
   "/snippets": { title: "摘录", parent: "/projects" },
   "/work": { title: "工作记录" },
+  "/meetings": { title: "会议纪要" },
   "/all": { title: "全部链接", parent: "/projects" },
   "/recent": { title: "最近访问", parent: "/" },
   "/trash": { title: "回收站", parent: "/projects" },
@@ -164,7 +166,7 @@ export function MobileHeader() {
 
 const TABS: { href: string; label: string; icon: NavIconName; match: (p: string) => boolean }[] = [
   { href: "/", label: "工作台", icon: "home", match: (p) => p === "/" || p === "/recent" },
-  { href: "/work", label: "工作", icon: "work", match: (p) => p === "/work" },
+  { href: "/work", label: "工作", icon: "work", match: (p) => p === "/work" || p === "/meetings" },
   {
     href: "/projects",
     label: "项目",
@@ -175,7 +177,12 @@ const TABS: { href: string; label: string; icon: NavIconName; match: (p: string)
   { href: "/settings", label: "我的", icon: "user", match: (p) => p === "/settings" },
 ];
 
-const FAB_LABELS: Record<string, string> = { "/reminders": "添加提醒", "/snippets": "添加摘录", "/work": "记一笔" };
+const FAB_LABELS: Record<string, string> = {
+  "/reminders": "添加提醒",
+  "/snippets": "添加摘录",
+  "/work": "记一笔",
+  "/meetings": "新建会议纪要",
+};
 
 /** 工作记录页的输入框在页面顶部，点添加按钮时滚过去并聚焦 */
 function focusWorkInput() {
@@ -199,6 +206,7 @@ export function TabBar() {
             if (pathname === "/reminders") ui.editReminder();
             else if (pathname === "/snippets") ui.editSnippet();
             else if (pathname === "/work") focusWorkInput();
+            else if (pathname === "/meetings") window.dispatchEvent(new Event(NEW_MEETING_EVENT));
             else ui.addLink();
           }}
           className="fixed right-5 bottom-[calc(76px+env(safe-area-inset-bottom))] z-30 flex size-[52px] cursor-pointer items-center justify-center rounded-full bg-accent text-white shadow-[0_6px_16px_rgb(51_112_255/0.4)] active:bg-accent-hover md:hidden"

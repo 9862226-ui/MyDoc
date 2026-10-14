@@ -30,6 +30,7 @@ import {
   type WorkLog,
 } from "./worklog";
 import { fetchHolidays, parseHolidayCn } from "./holidays";
+import { createMeeting, listMeetings } from "./meeting-repo";
 import { DEFAULT_NOTIFY, setNotifyConfig } from "./notify";
 import * as repo from "./repo";
 import { backupSchema } from "./schemas";
@@ -454,7 +455,17 @@ describe("JSON 备份里的工作记录", () => {
     ]);
     wr.setReportFields(db, "daily", "2026-10-12", { submittedAt: "2026-10-12T10:00:00Z" });
     wr.setWorkSettings(db, { ...DEFAULT_WORK_SETTINGS, dailyHours: 7.5 });
-    const backup = backupSchema.parse(JSON.parse(JSON.stringify({ ...repo.exportBackup(db), work: wr.exportWork(db) })));
+    createMeeting(db, {
+      title: "周会",
+      date: "2026-10-12",
+      projectId: p.id,
+      attendees: "",
+      source: "原文",
+      notes: "- [ ] a",
+    });
+    const backup = backupSchema.parse(
+      JSON.parse(JSON.stringify({ ...repo.exportBackup(db), work: wr.exportWork(db) })),
+    );
 
     const db2 = openDb(":memory:");
     const w = { ...backup.work!, settings: { ...DEFAULT_WORK_SETTINGS, ...backup.work!.settings } };
@@ -467,6 +478,9 @@ describe("JSON 备份里的工作记录", () => {
     ]);
     expect(data2.reports["daily:2026-10-12"].submittedAt).toBe("2026-10-12T10:00:00Z");
     expect(data2.settings.dailyHours).toBe(7.5);
+    expect(listMeetings(db2).map((m) => [m.title, m.notes, m.projectId !== null])).toEqual([["周会", "- [ ] a", true]]);
+    wr.importWork(db2, w);
+    expect(listMeetings(db2)).toHaveLength(1);
   });
 
   it("以前没有工作记录的备份也能恢复", () => {
@@ -488,7 +502,9 @@ describe("搜索工作记录", () => {
   it("全部记录的接口带上拼音（包括项目名）", () => {
     const db = openDb(":memory:");
     const p = wr.createWorkProject(db, { name: "知识库", code: "", taskName: "", taskCode: "", archived: false });
-    wr.createWorkLogs(db, [{ date: "2026-10-12", period: "am", projectId: p.id, content: "写接口", hours: null, done: true }]);
+    wr.createWorkLogs(db, [
+      { date: "2026-10-12", period: "am", projectId: p.id, content: "写接口", hours: null, done: true },
+    ]);
     const all = wr.getWorkAll(db);
     expect(filterLogs(all.logs, "zsk", "all")).toHaveLength(1);
   });

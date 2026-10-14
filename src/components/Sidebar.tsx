@@ -211,6 +211,7 @@ export function Sidebar({ variant = "sidebar" }: { variant?: "sidebar" | "page" 
             <SectionTitle>工作</SectionTitle>
             <ul className="flex flex-col gap-0.5">
               <NavItem href="/work" icon="work" label="工作记录" active={pathname === "/work"} />
+              <NavItem href="/meetings" icon="meeting" label="会议纪要" active={pathname === "/meetings"} />
             </ul>
             <SectionTitle>收藏</SectionTitle>
             <ul className="flex flex-col gap-0.5">

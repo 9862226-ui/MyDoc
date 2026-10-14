@@ -154,6 +154,20 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (kind, period_key)
   );
   `,
+  `
+  CREATE TABLE meetings (
+    id INTEGER PRIMARY KEY,
+    title TEXT NOT NULL,
+    date TEXT NOT NULL,
+    project_id INTEGER REFERENCES work_projects(id) ON DELETE SET NULL,
+    attendees TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_meetings_date ON meetings(date);
+  `,
 ];
 
 export function migrate(db: DB): void {

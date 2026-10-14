@@ -2,6 +2,7 @@
 
 import { CircleCheck, Copy } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import NextLink from "next/link";
 import { mutate as revalidate } from "swr";
 import { api, copyText } from "@/lib/client";
 import type { DayStatus, WeekStatus } from "@/lib/worklog";
@@ -84,6 +85,9 @@ export function ReportCard({
   );
 }
 
+/** 手机右下角的加号在会议纪要页上：新建会议纪要 */
+export const NEW_MEETING_EVENT = "mydoc:new-meeting";
+
 /** 改了数据后，日报、周报、日历、列表都要刷新 */
 export const refreshWork = () => revalidate((k) => typeof k === "string" && k.startsWith("/api/work"));
 
@@ -163,5 +167,34 @@ export function StatusBadge({ status }: { status: DayStatus | WeekStatus }) {
     >
       {s.label}
     </span>
+  );
+}
+
+/**
+ * 手机上「工作记录 / 会议纪要」切换（两个独立模块共用底部的「工作」标签）；电脑上在侧边栏切换，不显示
+ */
+export function WorkModuleSwitch({ current }: { current: "work" | "meetings" }) {
+  const items = [
+    { key: "work", href: "/work", label: "工作记录" },
+    { key: "meetings", href: "/meetings", label: "会议纪要" },
+  ] as const;
+  return (
+    <nav aria-label="工作模块" className="flex rounded-lg bg-field p-0.5 md:hidden">
+      {items.map((i) => (
+        <NextLink
+          key={i.key}
+          href={i.href}
+          aria-current={current === i.key ? "page" : undefined}
+          className={cx(
+            "flex h-8 flex-1 items-center justify-center rounded-md text-[13px] transition-colors",
+            current === i.key
+              ? "bg-surface font-medium text-fg shadow-[0_1px_2px_var(--shadow)] dark:bg-chip"
+              : "text-muted",
+          )}
+        >
+          {i.label}
+        </NextLink>
+      ))}
+    </nav>
   );
 }

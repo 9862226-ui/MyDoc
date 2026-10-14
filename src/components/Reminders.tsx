@@ -42,10 +42,12 @@ export function ReminderDialog({
   open,
   onClose,
   reminder,
+  init,
 }: {
   open: boolean;
   onClose: () => void;
   reminder?: Reminder;
+  init?: { title?: string; note?: string };
 }) {
   return (
     <Dialog
@@ -55,19 +57,27 @@ export function ReminderDialog({
       description={reminder ? undefined : "记下账号、域名、服务器、会员的到期时间，快到期时提醒你"}
       bodyClassName="pb-0"
     >
-      <ReminderForm reminder={reminder} onDone={onClose} />
+      <ReminderForm reminder={reminder} init={init} onDone={onClose} />
     </Dialog>
   );
 }
 
-function ReminderForm({ reminder, onDone }: { reminder?: Reminder; onDone: () => void }) {
+function ReminderForm({
+  reminder,
+  init,
+  onDone,
+}: {
+  reminder?: Reminder;
+  init?: { title?: string; note?: string };
+  onDone: () => void;
+}) {
   const ui = useUI();
-  const [title, setTitle] = useState(reminder?.title ?? "");
+  const [title, setTitle] = useState(reminder?.title ?? init?.title ?? "");
   const [dueDate, setDueDate] = useState(reminder?.dueDate ?? "");
   const [repeat, setRepeat] = useState<RepeatKind>(reminder?.repeat ?? "yearly");
   const [remindDays, setRemindDays] = useState(reminder?.remindDays ?? 7);
   const [url, setUrl] = useState(reminder?.url ?? "");
-  const [note, setNote] = useState(reminder?.note ?? "");
+  const [note, setNote] = useState(reminder?.note ?? init?.note ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ field: "title" | "dueDate" | "url" | "other"; message: string } | null>(null);
 

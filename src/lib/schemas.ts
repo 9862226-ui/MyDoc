@@ -261,6 +261,19 @@ export const backupSchema = z.object({
         }),
       ),
       settings: z.object({ dailyHours: z.number().min(0.5).max(24) }).passthrough(),
+      meetings: z
+        .array(
+          z.object({
+            title: z.string().trim().min(1).max(200),
+            date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+            project: z.string().nullable(),
+            attendees: z.string().max(500).default(""),
+            source: z.string().max(100_000).default(""),
+            notes: z.string().max(50_000).default(""),
+            createdAt: z.string(),
+          }),
+        )
+        .default([]),
     })
     .optional(),
 });
@@ -387,3 +400,25 @@ export const workSettingsSchema = z
 export const workRemindTestSchema = z.object({ kind: z.enum(["daily", "weekly"]) });
 
 export const workAiSchema = z.object({ kind: z.literal("daily").default("daily"), date: workDate });
+
+/* ---------- 会议纪要 ---------- */
+
+const meetingFields = {
+  title: z.string().trim().min(1, "标题不能为空").max(200, "标题太长了"),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "日期格式不正确"),
+  projectId: id.nullable(),
+  attendees: z.string().trim().max(500, "参会人太长了"),
+  source: z.string().max(100_000, "文字稿太长了（最多 10 万字）"),
+  notes: z.string().max(50_000, "纪要太长了（最多 5 万字）"),
+};
+
+export const meetingCreateSchema = z.object({
+  title: meetingFields.title,
+  date: meetingFields.date,
+  projectId: meetingFields.projectId.default(null),
+  attendees: meetingFields.attendees.default(""),
+  source: meetingFields.source.default(""),
+  notes: meetingFields.notes.default(""),
+});
+
+export const meetingPatchSchema = z.object(meetingFields).partial();

@@ -44,7 +44,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [projectDialog, setProjectDialog] = useState<{ open: boolean; project?: Project; groupId?: number }>({
     open: false,
   });
-  const [reminderDialog, setReminderDialog] = useState<{ open: boolean; reminder?: Reminder }>({ open: false });
+  const [reminderDialog, setReminderDialog] = useState<{
+    open: boolean;
+    reminder?: Reminder;
+    init?: { title?: string; note?: string };
+  }>({ open: false });
   const [shareTarget, setShareTarget] = useState<Project | null>(null);
   const [snippetDialog, setSnippetDialog] = useState<{ open: boolean; snippet?: Snippet; init?: SnippetInit }>({
     open: false,
@@ -80,7 +84,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       editGroup: (group) => setGroupDialog({ open: true, group }),
       editProject: (project, groupId) => setProjectDialog({ open: true, project, groupId }),
       addTagsTo: (ids, done) => setTagTarget({ ids, done }),
-      editReminder: (reminder) => setReminderDialog({ open: true, reminder }),
+      editReminder: (reminder, init) => setReminderDialog({ open: true, reminder, init }),
       shareProject: (project) => setShareTarget(project),
       editSnippet: (snippet, init) => setSnippetDialog({ open: true, snippet, init }),
       organizeWithAi: (ids) => setAiIds(ids),
@@ -175,6 +179,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <ReminderDialog
         open={reminderDialog.open}
         reminder={reminderDialog.reminder}
+        init={reminderDialog.init}
         onClose={() => setReminderDialog({ open: false })}
       />
       <ShareDialog project={shareTarget} onClose={() => setShareTarget(null)} />
