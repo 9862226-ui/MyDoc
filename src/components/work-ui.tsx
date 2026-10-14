@@ -89,7 +89,8 @@ export function ReportCard({
 export const NEW_MEETING_EVENT = "mydoc:new-meeting";
 
 /** 改了数据后，日报、周报、日历、列表都要刷新 */
-export const refreshWork = () => revalidate((k) => typeof k === "string" && k.startsWith("/api/work"));
+export const refreshWork = () =>
+  revalidate((k) => typeof k === "string" && (k.startsWith("/api/work") || k.startsWith("/api/refs")));
 
 /** 标记 / 取消「已提交到公司系统」 */
 export function useSubmit() {

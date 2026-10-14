@@ -1,3 +1,5 @@
+import { refsToText } from "./refs";
+
 /**
  * Markdown 编辑的文本操作（纯函数，方便测试）：加粗、列表、待办、回车续列表、Tab 缩进、打勾。
  * 每个操作返回「把 [start, end) 换成 insert，然后选中 [selStart, selEnd)」。
@@ -160,7 +162,7 @@ export function toggleTask(text: string, n: number): string {
 
 /** 去掉 Markdown 标记，变成一行纯文字（列表、卡片的摘要里用） */
 export function plainText(md: string): string {
-  return md
+  return refsToText(md)
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
     .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")

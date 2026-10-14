@@ -27,8 +27,13 @@ export function useAppData() {
 }
 
 export function refreshData() {
+  // 链接备注、摘录里可能有引用，反向链接一起刷新
+  void mutate(BACKLINKS_KEY);
   return mutate(DATA_KEY);
 }
+
+/** 反向链接（见 lib/refs） */
+export const BACKLINKS_KEY = "/api/refs/backlinks";
 
 export function useTrash() {
   return useSWR<Link[]>(TRASH_KEY, (url: string) => api<Link[]>(url));

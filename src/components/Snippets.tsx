@@ -2,7 +2,7 @@
 
 import { ChevronDown, Copy, ExternalLink, Pencil, Pin, PinOff, Plus, Quote, Trash2 } from "lucide-react";
 import NextLink from "next/link";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { api, copyText, refreshData, useAppData } from "@/lib/client";
 import { shortTime } from "@/lib/format";
 import { toggleTask } from "@/lib/md-edit";
@@ -24,6 +24,7 @@ import {
   Skeleton,
   Tag,
 } from "./ui";
+import { BacklinkToggle } from "./Backlinks";
 import { Markdown } from "./Markdown";
 import { clearDraft, MarkdownEditor } from "./MarkdownEditor";
 import { useUI, type UI } from "./ui-context";
@@ -285,7 +286,10 @@ export function SnippetCard({
   const info = s.projectId === null ? undefined : projectIndex(data).get(s.projectId);
 
   return (
-    <article className="group/snippet flex break-inside-avoid flex-col gap-2.5 rounded-lg border border-line bg-surface p-4 transition-shadow hover:shadow-card">
+    <article
+      id={`snippet-${s.id}`}
+      className="group/snippet flex scroll-mt-24 break-inside-avoid flex-col gap-2.5 rounded-lg border border-line bg-surface p-4 transition-shadow hover:shadow-card"
+    >
       <div className={cx("relative", long && !expanded && "max-h-48 overflow-hidden")}>
         <Markdown text={s.content} onToggleTask={(n) => void actions.toggleTask(s, n)} />
         {long && !expanded && (
@@ -341,6 +345,7 @@ export function SnippetCard({
             #{t}
           </Tag>
         ))}
+        <BacklinkToggle type="snippet" id={s.id} />
         <span className="ml-auto shrink-0">{shortTime(s.createdAt)}</span>
         <span className="flex shrink-0 items-center gap-0.5">
           <IconButton label="复制" size="sm" onClick={() => void actions.copy(s)}>
@@ -369,6 +374,18 @@ export function SnippetsView() {
   const ui = useUI();
   const [q, setQ] = useState("");
   const shown = useMemo(() => (data ? data.snippets.filter((s) => snippetMatches(s, data, q)) : []), [data, q]);
+
+  // 从引用跳过来：/snippets?id=3 滚到那一条，闪一下
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("id");
+    const el = id && data ? document.getElementById(`snippet-${id}`) : null;
+    if (!el) return;
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    el.classList.add("ring-2", "ring-accent/50");
+    const t = setTimeout(() => el.classList.remove("ring-2", "ring-accent/50"), 2500);
+    window.history.replaceState(null, "", "/snippets");
+    return () => clearTimeout(t);
+  }, [!!data]);
 
   return (
     <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-5 px-4 pt-4 pb-12 md:px-8 md:pt-6">

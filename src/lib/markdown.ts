@@ -1,4 +1,5 @@
 import MarkdownIt from "markdown-it";
+import { REF_LABEL, refHref, refRegExp, type RefType } from "./refs";
 
 /**
  * 把 Markdown 渲染成 HTML。不允许原始 HTML（html: false，所有尖括号都会转义），
@@ -37,6 +38,27 @@ md.core.ruler.after("inline", "task-list", (state) => {
     t.children!.unshift(box);
     tokens[i - 2].attrJoin("class", checked ? "md-task-item md-task-done" : "md-task-item");
   }
+});
+
+// 内容引用：[[log:12|标题]] 显示成一个可以点的引用；链接类型在新标签页打开
+const REF_STICKY = refRegExp("y");
+md.inline.ruler.before("link", "ref", (state, silent) => {
+  if (state.src.charCodeAt(state.pos) !== 0x5b || state.src.charCodeAt(state.pos + 1) !== 0x5b) return false;
+  REF_STICKY.lastIndex = state.pos;
+  const m = REF_STICKY.exec(state.src);
+  if (!m) return false;
+  if (!silent) {
+    const type = m[1] as RefType;
+    const id = Number(m[2]);
+    const label = (m[3] ?? "").trim() || REF_LABEL[type];
+    const external = type === "link" ? ' target="_blank" rel="noopener noreferrer"' : "";
+    const token = state.push("html_inline", "", 0);
+    token.content =
+      `<a class="md-ref md-ref-${type}" href="${refHref(type, id)}" data-ref="${type}:${id}" title="${REF_LABEL[type]}"${external}>` +
+      `${md.utils.escapeHtml(label)}</a>`;
+  }
+  state.pos += m[0].length;
+  return true;
 });
 
 export function renderMarkdown(src: string): string {

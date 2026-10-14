@@ -20,6 +20,8 @@ import { localDate } from "@/lib/format";
 import { toggleTask } from "@/lib/md-edit";
 import { appendToSection, meetingText, NOTES_TEMPLATE, parseTasks, splitSentences, type Meeting } from "@/lib/meetings";
 import { currentPeriod, weekdayLabel } from "@/lib/worklog";
+import { refKey } from "@/lib/refs";
+import { BacklinkList, useBacklinks } from "./Backlinks";
 import { Markdown } from "./Markdown";
 import { clearDraft, MarkdownEditor } from "./MarkdownEditor";
 import { Button, cx, EmptyState, Field, IconButton, Input, SearchField, Select, Skeleton, Textarea } from "./ui";
@@ -71,12 +73,15 @@ function MeetingsBody({ today }: { today: string }) {
 
   // 命令面板的「新建会议纪要」：/meetings?do=new
   const router = useRouter();
-  const doParam = useSearchParams().get("do");
+  // 从引用跳过来：/meetings?id=5 打开那一条
+  const params = useSearchParams();
+  const doParam = params.get("do");
+  const idParam = params.get("id");
   useEffect(() => {
-    if (doParam !== "new") return;
-    setMode({ kind: "edit", id: null });
+    if (doParam !== "new" && !idParam) return;
+    setMode(doParam === "new" ? { kind: "edit", id: null } : { kind: "view", id: Number(idParam) });
     router.replace("/meetings", { scroll: false });
-  }, [doParam]);
+  }, [doParam, idParam]);
 
   const shown = useMemo(() => {
     const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -351,6 +356,8 @@ function MeetingView({
         </section>
       )}
 
+      <MeetingBacklinks id={m.id} />
+
       {m.source.trim() && (
         <details className="group rounded-lg border border-line">
           <summary className="flex cursor-pointer list-none items-center gap-1.5 px-4 py-2.5 text-[13px] [&::-webkit-details-marker]:hidden">
@@ -513,5 +520,20 @@ function MeetingEditor({
         </Button>
       </div>
     </form>
+  );
+}
+
+/** 引用了这次会议的工作记录、其他会议 */
+function MeetingBacklinks({ id }: { id: number }) {
+  const { data } = useBacklinks();
+  const sources = data?.[refKey("meeting", id)] ?? [];
+  if (!sources.length) return null;
+  return (
+    <section aria-label="被引用" className="rounded-lg border border-line px-4 py-2.5">
+      <h3 className="mb-1 text-[13px] font-medium">
+        被引用 <span className="font-normal text-faint">{sources.length}</span>
+      </h3>
+      <BacklinkList sources={sources} />
+    </section>
   );
 }

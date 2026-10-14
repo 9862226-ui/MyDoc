@@ -183,6 +183,62 @@ const MIGRATIONS: string[] = [
     UNIQUE (project_id, week)
   );
   `,
+  // 内容引用（[[log:12]]）靠 id 找内容：删掉最后一条后，新建的不能再用这个 id，否则旧引用会指到新内容。
+  // 改成 AUTOINCREMENT（这几张表没有被别的表引用，可以直接重建）
+  `
+  CREATE TABLE work_logs_new (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL,
+    period TEXT NOT NULL DEFAULT 'am',
+    project_id INTEGER REFERENCES work_projects(id) ON DELETE SET NULL,
+    content TEXT NOT NULL,
+    hours REAL,
+    done INTEGER NOT NULL DEFAULT 1,
+    source TEXT NOT NULL DEFAULT 'web',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT ''
+  );
+  INSERT INTO work_logs_new (id, date, period, project_id, content, hours, done, source, created_at, updated_at, detail)
+    SELECT id, date, period, project_id, content, hours, done, source, created_at, updated_at, detail FROM work_logs;
+  DROP TABLE work_logs;
+  ALTER TABLE work_logs_new RENAME TO work_logs;
+  CREATE INDEX idx_work_logs_date ON work_logs(date);
+
+  CREATE TABLE meetings_new (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    date TEXT NOT NULL,
+    project_id INTEGER REFERENCES work_projects(id) ON DELETE SET NULL,
+    attendees TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  INSERT INTO meetings_new (id, title, date, project_id, attendees, source, notes, created_at, updated_at)
+    SELECT id, title, date, project_id, attendees, source, notes, created_at, updated_at FROM meetings;
+  DROP TABLE meetings;
+  ALTER TABLE meetings_new RENAME TO meetings;
+  CREATE INDEX idx_meetings_date ON meetings(date);
+
+  CREATE TABLE snippets_new (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    content TEXT NOT NULL,
+    project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+    tags_json TEXT NOT NULL DEFAULT '[]',
+    source_url TEXT NOT NULL DEFAULT '',
+    source_title TEXT NOT NULL DEFAULT '',
+    pinned INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  INSERT INTO snippets_new (id, content, project_id, tags_json, source_url, source_title, pinned, created_at, updated_at)
+    SELECT id, content, project_id, tags_json, source_url, source_title, pinned, created_at, updated_at FROM snippets;
+  DROP TABLE snippets;
+  ALTER TABLE snippets_new RENAME TO snippets;
+  CREATE INDEX idx_snippets_project ON snippets(project_id);
+  `,
 ];
 
 export function migrate(db: DB): void {

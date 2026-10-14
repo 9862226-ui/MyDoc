@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useMemo } from "react";
 import { renderMarkdown } from "@/lib/markdown";
 import { cx } from "./ui";
@@ -17,6 +18,7 @@ export function Markdown({
   onToggleTask?: (index: number) => void;
   className?: string;
 }) {
+  const router = useRouter();
   const html = useMemo(() => {
     const out = renderMarkdown(text);
     return onToggleTask ? out : out.replaceAll('class="md-task"', 'class="md-task" disabled');
@@ -26,6 +28,13 @@ export function Markdown({
       className={cx("markdown", className)}
       onClick={(e) => {
         const t = e.target as HTMLElement;
+        // 站内的引用不整页刷新（链接类型的引用在新标签页打开，交给浏览器）
+        const a = t.closest("a.md-ref");
+        if (a instanceof HTMLAnchorElement && !a.target && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+          e.preventDefault();
+          router.push(a.getAttribute("href")!);
+          return;
+        }
         if (onToggleTask && t instanceof HTMLInputElement && t.dataset.task) {
           e.preventDefault();
           onToggleTask(Number(t.dataset.task));

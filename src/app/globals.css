@@ -320,3 +320,33 @@
 .markdown .md-tag {
   color: var(--accent-text);
 }
+/* 内容引用：[[log:12|标题]] */
+.markdown .md-ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25em;
+  margin: 0 0.1em;
+  padding: 0 0.4em;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  text-decoration: none;
+  line-height: 1.5;
+}
+.markdown .md-ref::before {
+  content: "↗";
+  font-size: 0.8em;
+  opacity: 0.7;
+}
+.markdown .md-ref-log::before {
+  content: "✎";
+}
+.markdown .md-ref-meeting::before {
+  content: "◎";
+}
+.markdown .md-ref-snippet::before {
+  content: "❝";
+}
+.markdown .md-ref:hover {
+  text-decoration: underline;
+}

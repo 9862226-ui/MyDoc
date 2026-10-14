@@ -6,6 +6,7 @@ import {
   Circle,
   CircleCheck,
   Copy,
+  CornerDownRight,
   Bell,
   CalendarDays,
   List,
@@ -26,6 +27,7 @@ import useSWR from "swr";
 import { api, readLocal, writeLocal } from "@/lib/client";
 import { localDate } from "@/lib/format";
 import { toggleTask } from "@/lib/md-edit";
+import { refToken } from "@/lib/refs";
 import {
   buildDaily,
   buildWeekly,
@@ -64,6 +66,7 @@ import { WorkDailyList } from "./WorkDailyList";
 import { WorkHistory } from "./WorkHistory";
 import { DayPlanCard, PlanDialog, ShutdownDialog } from "./WorkPlan";
 import { HealthDot, ProjectStatusCard } from "./WorkProjectStatus";
+import { BacklinkToggle } from "./Backlinks";
 import {
   Banner,
   Button,
@@ -116,8 +119,18 @@ export function WorkView() {
   const router = useRouter();
   const dateParam = params.get("date");
   const doParam = params.get("do");
+  // 从引用跳过来：?date=2026-10-12&log=12 高亮那一条
+  const logParam = params.get("log");
+  const [highlight, setHighlight] = useState<number | null>(null);
+  // 接着做：把内容和引用填进输入框
+  const [prefill, setPrefill] = useState<Prefill | null>(null);
   useEffect(() => {
     const day = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : null;
+    if (day && logParam) {
+      setHighlight(Number(logParam));
+      setTimeout(() => setHighlight(null), 2500);
+      router.replace(`/work?date=${day}`, { scroll: false });
+    }
     if (!day && !doParam) return;
     setDate(day ?? localDate());
     if (doParam === "weekly" || doParam === "calendar") {
@@ -130,9 +143,16 @@ export function WorkView() {
     if (doParam === "plan") setPlanOpen(true);
     if (doParam === "shutdown") setShutdownOpen(true);
     if (doParam) router.replace(day ? `/work?date=${day}` : "/work", { scroll: false });
-  }, [dateParam, doParam]);
+  }, [dateParam, doParam, logParam]);
   const { data, mutate } = useWork(date);
   const today = localDate();
+  // 高亮的那条加载出来后滚到中间
+  useEffect(() => {
+    if (highlight === null) return;
+    requestAnimationFrame(() =>
+      document.getElementById(`log-${highlight}`)?.scrollIntoView({ block: "center", behavior: "smooth" }),
+    );
+  }, [highlight, !!data]);
 
   useEffect(() => {
     setFocus(readLocal("mydoc.workFocus", false));
@@ -305,6 +325,7 @@ export function WorkView() {
                 data={data}
                 date={date}
                 focusKey={captureKey}
+                prefill={prefill}
                 onAdd={async (body) => {
                   let ok = false;
                   await run(async () => {
@@ -315,7 +336,23 @@ export function WorkView() {
                 }}
                 onManageProjects={() => setProjectsOpen(true)}
               />
-              <LogList data={data} kind={kind} date={date} run={run} mutate={mutate} />
+              <LogList
+                data={data}
+                kind={kind}
+                date={date}
+                run={run}
+                mutate={mutate}
+                highlight={highlight}
+                onContinue={(l) => {
+                  setDate(today);
+                  setPrefill({
+                    key: Date.now(),
+                    text: `继续${l.content.replace(/^继续[：:]?/, "")}`,
+                    detail: `接着 ${refToken("log", l.id, l.content)}\n`,
+                    projectId: l.projectId,
+                  });
+                }}
+              />
             </div>
           ) : (
             <WorkHistory selected={weekStart(date)} today={today} onSelectWeek={setDate} onOpenDay={openDay} />
@@ -345,10 +382,18 @@ export function WorkView() {
 
 const DETAIL_DRAFT = "work-detail";
 
+interface Prefill {
+  key: number;
+  text: string;
+  detail: string;
+  projectId: number | null;
+}
+
 function Composer({
   data,
   date,
   focusKey,
+  prefill,
   onAdd,
   onManageProjects,
 }: {
@@ -356,6 +401,8 @@ function Composer({
   date: string;
   /** 变了就让输入框获得焦点（快捷键 C、命令面板的「记一笔」） */
   focusKey: number;
+  /** 接着做：填好内容和关联 */
+  prefill: Prefill | null;
   onAdd: (body: object) => Promise<boolean>;
   onManageProjects: () => void;
 }) {
@@ -383,6 +430,16 @@ function Composer({
     titleRef.current?.focus();
     titleRef.current?.scrollIntoView({ block: "center" });
   }, [focusKey]);
+  useEffect(() => {
+    if (!prefill) return;
+    setText(prefill.text);
+    setDetail(prefill.detail);
+    if (prefill.projectId !== null && projects.some((p) => p.id === prefill.projectId)) setProjectId(prefill.projectId);
+    const el = titleRef.current;
+    el?.scrollIntoView({ block: "center" });
+    el?.focus();
+    el?.setSelectionRange(prefill.text.length, prefill.text.length);
+  }, [prefill?.key]);
 
   // 工作内容框跟着内容变高
   useLayoutEffect(() => {
@@ -510,12 +567,18 @@ function LogList({
   date,
   run,
   mutate,
+  highlight,
+  onContinue,
 }: {
   data: WorkData;
   kind: Kind;
   date: string;
   run: (fn: () => Promise<unknown>) => Promise<void>;
   mutate: () => Promise<unknown>;
+  /** 从引用跳过来时，高亮这一条 */
+  highlight?: number | null;
+  /** 接着做：今天新记一条，关联这条 */
+  onContinue: (log: WorkLog) => void;
 }) {
   const ui = useUI();
   const groups = useMemo(() => {
@@ -585,6 +648,8 @@ function LogList({
                 log={l}
                 projects={data.projects}
                 showPeriod={kind === "weekly"}
+                highlight={highlight === l.id}
+                onContinue={() => onContinue(l)}
                 onPatch={(patch) => run(() => api(`/api/work/logs/${l.id}`, { method: "PATCH", body: patch }))}
                 onDelete={() => void remove(l)}
               />
@@ -600,12 +665,16 @@ function LogRow({
   log,
   projects,
   showPeriod,
+  highlight,
+  onContinue,
   onPatch,
   onDelete,
 }: {
   log: WorkLog;
   projects: WorkProject[];
   showPeriod: boolean;
+  highlight: boolean;
+  onContinue: () => void;
   onPatch: (patch: Partial<WorkLog>) => Promise<void>;
   onDelete: () => void;
 }) {
@@ -620,7 +689,13 @@ function LogRow({
     else setDraft(log.content);
   };
   return (
-    <li className="group/log flex items-start gap-2.5 border-b border-line px-3 py-2.5 last:border-b-0">
+    <li
+      id={`log-${log.id}`}
+      className={cx(
+        "group/log flex scroll-mt-24 items-start gap-2.5 border-b border-line px-3 py-2.5 transition-colors duration-700 last:border-b-0",
+        highlight && "bg-accent-soft",
+      )}
+    >
       <button
         type="button"
         aria-label={log.done ? "标记为未完成" : "标记为已完成"}
@@ -679,6 +754,7 @@ function LogRow({
               + 补充明细
             </button>
           )}
+          <BacklinkToggle type="log" id={log.id} label="关联" />
         </div>
         {log.detail.trim() && (
           <LogDetail
@@ -689,6 +765,9 @@ function LogRow({
         )}
       </div>
       <div className="flex shrink-0 opacity-0 group-hover/log:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
+        <IconButton label="接着做：今天新记一条，关联这条" size="sm" onClick={onContinue}>
+          <CornerDownRight size={15} />
+        </IconButton>
         <IconButton label="修改" size="sm" onClick={() => setDialog(true)}>
           <Pencil size={15} />
         </IconButton>
