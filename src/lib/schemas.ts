@@ -307,7 +307,7 @@ export const syncConfigSchema = z.object({
   webdavUrl: z.string().trim().max(1000),
   webdavUser: z.string().trim().max(200),
   webdavPassword: z.string().max(500),
-  s3Provider: z.enum(["oss", "cos", "other"]),
+  s3Provider: z.enum(["oss", "cos", "r2", "other"]),
   s3Endpoint: z.string().trim().max(500),
   s3Region: z.string().trim().max(100),
   s3Bucket: z.string().trim().max(200),
@@ -315,6 +315,7 @@ export const syncConfigSchema = z.object({
   s3SecretKey: z.string().max(500),
   s3Prefix: z.string().trim().max(200),
   s3PathStyle: z.boolean(),
+  r2AccountId: z.string().trim().max(100).default(""),
   keep: z.number().int().min(1).max(365),
 });
 

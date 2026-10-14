@@ -48,7 +48,7 @@ export function AutoBackupCard() {
   return (
     <Card
       title="自动备份"
-      description={`每天自动备份一次完整数据库，保留最近 ${data?.keep ?? 7} 份，存放在服务器的 data/backups 目录`}
+      description={`每天自动备份一次完整数据库，保留最近 ${data?.keep ?? 7} 份，存放在服务器的 data/backups 目录；图片和附件同步到 data/backups/attachments，同样的文件只存一份`}
     >
       {!data ? (
         <div className="skeleton my-3 h-10 rounded-md" />
@@ -80,6 +80,11 @@ export function AutoBackupCard() {
               <code className="rounded bg-field px-1 font-mono">mydoc.db-wal</code> 和{" "}
               <code className="rounded bg-field px-1 font-mono">mydoc.db-shm</code>
             </li>
+            <li>
+              如果清理过附件，把 <code className="rounded bg-field px-1 font-mono">data/backups/attachments</code>{" "}
+              里的文件夹复制回 <code className="rounded bg-field px-1 font-mono">data/attachments</code>
+              （已有的不用覆盖）
+            </li>
             <li>重新启动服务</li>
           </ol>
         </details>
@@ -95,6 +100,7 @@ const PROVIDERS: Record<S3Provider, { label: string; region: string; regionHint:
     regionHint: "Bucket 概览页「地域」里的 ID，例如 cn-hangzhou、cn-beijing",
   },
   cos: { label: "腾讯云 COS", region: "ap-guangzhou", regionHint: "存储桶所在地域，例如 ap-guangzhou、ap-shanghai" },
+  r2: { label: "Cloudflare R2", region: "auto", regionHint: "" },
   other: { label: "其他 S3 兼容服务", region: "us-east-1", regionHint: "不清楚就填 us-east-1" },
 };
 
@@ -163,7 +169,7 @@ export function BackupSyncCard() {
   return (
     <Card
       title="异地备份"
-      description="每天自动备份后，再把备份文件传一份到别的地方。服务器硬盘坏了、被误删或到期没续费，数据也不会丢。"
+      description="每天自动备份后，再把备份文件传一份到别的地方，图片和附件传到同一位置的 attachments 文件夹（只传新增的）。服务器硬盘坏了、被误删或到期没续费，数据也不会丢。"
     >
       <form
         className="flex flex-col gap-5 py-3"
@@ -184,7 +190,7 @@ export function BackupSyncCard() {
             onChange={(v) => set("type", v)}
             options={[
               { value: "webdav", label: "WebDAV 网盘（坚果云等）" },
-              { value: "s3", label: "对象存储（阿里云 OSS、腾讯云 COS 等）" },
+              { value: "s3", label: "对象存储（阿里云 OSS、腾讯云 COS、Cloudflare R2 等）" },
             ]}
           />
         </Field>
@@ -235,6 +241,19 @@ export function BackupSyncCard() {
                 options={(Object.keys(PROVIDERS) as S3Provider[]).map((p) => ({ value: p, label: PROVIDERS[p].label }))}
               />
             </Field>
+            {form.s3Provider === "r2" && (
+              <Field
+                label="账户 ID（Account ID）"
+                hint="Cloudflare 控制台 › R2 概览页右侧的 32 位 ID；地址和地域会自动填好"
+              >
+                <Input
+                  value={form.r2AccountId}
+                  onChange={(e) => set("r2AccountId", e.target.value)}
+                  placeholder="例如 0123456789abcdef0123456789abcdef"
+                  className="font-mono text-[13px]"
+                />
+              </Field>
+            )}
             {form.s3Provider === "other" && (
               <Field
                 label="服务地址（Endpoint）"
@@ -254,13 +273,15 @@ export function BackupSyncCard() {
               >
                 <Input value={form.s3Bucket} onChange={(e) => set("s3Bucket", e.target.value)} />
               </Field>
-              <Field label="地域" hint={provider.regionHint}>
-                <Input
-                  value={form.s3Region}
-                  onChange={(e) => set("s3Region", e.target.value)}
-                  placeholder={provider.region}
-                />
-              </Field>
+              {form.s3Provider !== "r2" && (
+                <Field label="地域" hint={provider.regionHint}>
+                  <Input
+                    value={form.s3Region}
+                    onChange={(e) => set("s3Region", e.target.value)}
+                    placeholder={provider.region}
+                  />
+                </Field>
+              )}
               <Field label="AccessKey ID">
                 <Input
                   value={form.s3AccessKey}
@@ -297,7 +318,9 @@ export function BackupSyncCard() {
               </label>
             )}
             <p className="-mt-2 text-xs leading-5 text-faint">
-              建议新建一个只能访问这个存储桶的子账号（阿里云 RAM、腾讯云 CAM），用它的 AccessKey，不要用主账号的。
+              {form.s3Provider === "r2"
+                ? "R2 的访问密钥在「管理 R2 API 令牌」里创建，权限选「对象读和写」并只指定这个存储桶。"
+                : "建议新建一个只能访问这个存储桶的子账号（阿里云 RAM、腾讯云 CAM），用它的 AccessKey，不要用主账号的。"}
             </p>
           </>
         )}
