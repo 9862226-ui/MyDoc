@@ -3,6 +3,7 @@
  * 这里只有纯函数，浏览器和服务端都能用。
  */
 
+import type { SpecialDay } from "./holidays";
 import { pinyinMatch } from "./view";
 
 export type Period = "am" | "pm";
@@ -52,6 +53,10 @@ export interface WorkSettings {
   weeklyTime: string;
   /** 提醒消息里带上整理好的日报、周报 */
   remindWithReport: boolean;
+  /** 法定节假日、调休补班和手动设置的休息日，按日期 */
+  specialDays: Record<string, SpecialDay>;
+  /** 已经导入过节假日安排的年份 */
+  holidayYears: number[];
 }
 
 export const DEFAULT_WORK_SETTINGS: WorkSettings = {
@@ -63,7 +68,16 @@ export const DEFAULT_WORK_SETTINGS: WorkSettings = {
   weeklyDay: 5,
   weeklyTime: "16:00",
   remindWithReport: true,
+  specialDays: {},
+  holidayYears: [],
 };
+
+/** 这天要不要上班：节假日、补班优先，其余按设置的工作日（默认周一到周五） */
+export function isWorkday(s: Pick<WorkSettings, "remindDays" | "specialDays">, date: string): boolean {
+  const special = s.specialDays?.[date];
+  if (special) return !special.off;
+  return s.remindDays.includes(weekdayOf(date));
+}
 
 /** 下班提醒的状态（给页面显示） */
 export interface RemindInfo {
@@ -704,8 +718,13 @@ export function dayStats(data: WorkData): Map<string, DayStat> {
 }
 
 /** 漏写的日子：在提醒日（默认周一到周五）里、已经过去、却没有记录 */
-export function isMissed(date: string, today: string, stats: Map<string, DayStat>, workdays: number[]): boolean {
-  return date < today && !stats.has(date) && workdays.includes(weekdayOf(date));
+export function isMissed(
+  date: string,
+  today: string,
+  stats: Map<string, DayStat>,
+  s: Pick<WorkSettings, "remindDays" | "specialDays">,
+): boolean {
+  return date < today && !stats.has(date) && isWorkday(s, date);
 }
 
 /** 某段时间里每个项目的工时和条数，工时多的在前 */
@@ -766,7 +785,7 @@ export type DayStatus = "submitted" | "unsubmitted" | "missed";
 export function dayStatus(data: WorkData, date: string, today: string): DayStatus | null {
   if (data.reports[reportKey("daily", date)]?.submittedAt) return "submitted";
   if (data.logs.some((l) => l.date === date)) return "unsubmitted";
-  if (date < today && data.settings.remindDays.includes(weekdayOf(date))) return "missed";
+  if (date < today && isWorkday(data.settings, date)) return "missed";
   return null;
 }
 

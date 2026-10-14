@@ -1,5 +1,6 @@
 import type { DB } from "./db";
 import { HttpError } from "./errors";
+import type { SpecialDay } from "./holidays";
 import { getNotifyConfig } from "./notify";
 import { pinyinIndex } from "./pinyin";
 import { getSetting, setSetting } from "./settings";
@@ -378,4 +379,32 @@ export function importWork(db: DB, w: WorkBackup): number {
     if (!db.prepare("SELECT 1 FROM settings WHERE key = ?").get(SETTINGS_KEY)) setWorkSettings(db, w.settings);
     return added;
   })();
+}
+
+/* ---------- 节假日、补班 ---------- */
+
+/** 导入某一年的法定节假日；手动设置过的日子保留手动的 */
+export function importHolidays(db: DB, year: number, days: Record<string, SpecialDay>): WorkSettings {
+  const s = getWorkSettings(db);
+  const kept = Object.fromEntries(
+    Object.entries(s.specialDays).filter(([d, v]) => v.manual || !d.startsWith(`${year}-`)),
+  );
+  const next: WorkSettings = {
+    ...s,
+    specialDays: { ...days, ...kept },
+    holidayYears: [...new Set([...s.holidayYears, year])].sort(),
+  };
+  setWorkSettings(db, next);
+  return next;
+}
+
+/** 手动把某天设成休息日 / 补班日；mode 为 null 时恢复默认 */
+export function setSpecialDay(db: DB, date: string, mode: "off" | "work" | null): WorkSettings {
+  const s = getWorkSettings(db);
+  const specialDays = { ...s.specialDays };
+  if (mode === null) delete specialDays[date];
+  else specialDays[date] = { off: mode === "off", name: mode === "off" ? "休息" : "补班", manual: true };
+  const next = { ...s, specialDays };
+  setWorkSettings(db, next);
+  return next;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, CircleCheck } from "lucide-react";
+import { CalendarCog, ChevronLeft, ChevronRight, CircleCheck } from "lucide-react";
 import { useMemo, useState } from "react";
 import useSWR from "swr";
 import { api } from "@/lib/client";
@@ -20,6 +20,7 @@ import {
   type WorkData,
 } from "@/lib/worklog";
 import { Button, cx, IconButton, Skeleton } from "./ui";
+import { HolidayBanner, HolidaysDialog } from "./WorkHolidays";
 
 export const WORK_ALL_KEY = "/api/work/all";
 
@@ -47,6 +48,7 @@ export function WorkCalendar({
 }) {
   const { data } = useWorkAll();
   const [month, setMonth] = useState(today.slice(0, 7));
+  const [holidaysOpen, setHolidaysOpen] = useState(false);
   const stats = useMemo(() => (data ? dayStats(data) : new Map<string, DayStat>()), [data]);
 
   if (!data) {
@@ -61,7 +63,7 @@ export function WorkCalendar({
   const days = monthGrid(month);
   const inMonth = days.filter((d) => d.startsWith(month));
   const logged = inMonth.filter((d) => stats.has(d));
-  const missed = inMonth.filter((d) => isMissed(d, today, stats, data.settings.remindDays));
+  const missed = inMonth.filter((d) => isMissed(d, today, stats, data.settings));
   const hours = logged.reduce((s, d) => s + (stats.get(d)?.hours ?? 0), 0);
   const count = logged.reduce((s, d) => s + (stats.get(d)?.count ?? 0), 0);
   const totals = projectTotals(data, inMonth[0], inMonth[inMonth.length - 1]);
@@ -96,6 +98,13 @@ export function WorkCalendar({
               工作 {logged.length} 天 · {count} 条 · {round(hours)} 小时
               {missed.length > 0 && <span className="text-warn-text"> · 漏写 {missed.length} 天</span>}
             </p>
+            <Button size="sm" variant="ghost" onClick={() => setHolidaysOpen(true)}>
+              <CalendarCog size={14} />
+              节假日
+            </Button>
+          </div>
+          <div className="px-1 pb-3 empty:hidden">
+            <HolidayBanner settings={data.settings} year={Number(today.slice(0, 4))} />
           </div>
 
           <div className="grid grid-cols-[1.75rem_repeat(7,minmax(0,1fr))] gap-1 md:grid-cols-[2.75rem_repeat(7,minmax(0,1fr))] md:gap-1.5">
@@ -108,8 +117,9 @@ export function WorkCalendar({
             {days.map((d, i) => {
               const st = stats.get(d);
               const other = !d.startsWith(month);
-              const miss = !other && isMissed(d, today, stats, data.settings.remindDays);
+              const miss = !other && isMissed(d, today, stats, data.settings);
               const submitted = !!data.reports[reportKey("daily", d)]?.submittedAt;
+              const special = data.settings.specialDays[d];
               const weekNo =
                 i % 7 === 0 ? (
                   <button
@@ -142,8 +152,23 @@ export function WorkCalendar({
                     d === today && "ring-2 ring-accent",
                   )}
                 >
-                  <span className={cx("text-[13px] tabular-nums", d === today ? "font-semibold text-accent-text" : "")}>
-                    {Number(d.slice(8))}
+                  <span className="flex items-center gap-1">
+                    <span
+                      className={cx("text-[13px] tabular-nums", d === today ? "font-semibold text-accent-text" : "")}
+                    >
+                      {Number(d.slice(8))}
+                    </span>
+                    {special && (
+                      <span
+                        title={special.name}
+                        className={cx(
+                          "rounded px-1 text-[10px] leading-4",
+                          special.off ? "bg-success-soft text-success-text" : "bg-warn-soft text-warn-text",
+                        )}
+                      >
+                        {special.off ? "休" : "班"}
+                      </span>
+                    )}
                   </span>
                   {st ? (
                     <span className="text-[11px] leading-4 text-fg/80 md:text-xs">
@@ -151,7 +176,10 @@ export function WorkCalendar({
                       {!submitted && d <= today && <span className="block text-warn-text max-md:hidden">未提交</span>}
                     </span>
                   ) : (
-                    miss && <span className="text-[11px] leading-4 text-warn-text max-md:hidden">未记录</span>
+                    (miss && <span className="text-[11px] leading-4 text-warn-text max-md:hidden">未记录</span>) ||
+                    (special?.off && special.name && (
+                      <span className="truncate text-[11px] leading-4 text-faint max-md:hidden">{special.name}</span>
+                    ))
                   )}
                   {submitted ? (
                     <CircleCheck
@@ -192,6 +220,11 @@ export function WorkCalendar({
               <CircleCheck size={12} className="text-success" />
               日报已提交
             </span>
+            <span className="flex items-center gap-1">
+              <span className="rounded bg-success-soft px-1 text-[10px] leading-4 text-success-text">休</span>
+              <span className="rounded bg-warn-soft px-1 text-[10px] leading-4 text-warn-text">班</span>
+              放假 / 补班
+            </span>
             <span className="max-md:hidden">点日期看日报，点左边的周次看周报</span>
           </div>
         </section>
@@ -225,6 +258,12 @@ export function WorkCalendar({
         </section>
       </div>
 
+      <HolidaysDialog
+        open={holidaysOpen}
+        onClose={() => setHolidaysOpen(false)}
+        settings={data.settings}
+        year={Number(month.slice(0, 4))}
+      />
       <YearHeatmap year={Number(today.slice(0, 4))} stats={stats} onOpenDay={onOpenDay} today={today} />
     </div>
   );

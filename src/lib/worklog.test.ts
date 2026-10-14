@@ -11,6 +11,7 @@ import {
   filterLogs,
   isMissed,
   isoWeek,
+  isWorkday,
   logsCsv,
   monthGrid,
   projectTotals,
@@ -28,6 +29,7 @@ import {
   type WorkData,
   type WorkLog,
 } from "./worklog";
+import { fetchHolidays, parseHolidayCn } from "./holidays";
 import { DEFAULT_NOTIFY, setNotifyConfig } from "./notify";
 import * as repo from "./repo";
 import { backupSchema } from "./schemas";
@@ -367,9 +369,9 @@ describe("日历和周报列表", () => {
     const stats = dayStats(d);
     expect(stats.get("2026-10-12")).toEqual({ count: 2, hours: 8, undone: 0 });
     expect(stats.get("2026-10-14")?.undone).toBe(1);
-    expect(isMissed("2026-10-13", "2026-10-15", stats, [1, 2, 3, 4, 5])).toBe(true);
-    expect(isMissed("2026-10-11", "2026-10-15", stats, [1, 2, 3, 4, 5])).toBe(false); // 周日
-    expect(isMissed("2026-10-16", "2026-10-15", stats, [1, 2, 3, 4, 5])).toBe(false); // 还没到
+    expect(isMissed("2026-10-13", "2026-10-15", stats, d.settings)).toBe(true);
+    expect(isMissed("2026-10-11", "2026-10-15", stats, d.settings)).toBe(false); // 周日
+    expect(isMissed("2026-10-16", "2026-10-15", stats, d.settings)).toBe(false); // 还没到
     expect(projectTotals(d, "2026-10-12", "2026-10-18")).toEqual([
       { projectId: 1, name: "智能造价系统", hours: 14, count: 2 },
       { projectId: 2, name: "数据平台", hours: 2, count: 1 },
@@ -489,5 +491,60 @@ describe("搜索工作记录", () => {
     wr.createWorkLogs(db, [{ date: "2026-10-12", period: "am", projectId: p.id, content: "写接口", hours: null, done: true }]);
     const all = wr.getWorkAll(db);
     expect(filterLogs(all.logs, "zsk", "all")).toHaveLength(1);
+  });
+});
+
+describe("法定节假日和补班", () => {
+  const sample = {
+    year: 2026,
+    days: [
+      { name: "国庆节", date: "2026-10-01", isOffDay: true },
+      { name: "国庆节", date: "2026-10-09", isOffDay: true },
+      { name: "国庆节", date: "2026-10-10", isOffDay: false },
+    ],
+  };
+
+  it("解析节假日数据，年份不对时报错", () => {
+    expect(parseHolidayCn(sample, 2026)["2026-10-10"]).toEqual({ off: false, name: "国庆节" });
+    expect(() => parseHolidayCn(sample, 2027)).toThrow();
+    expect(() => parseHolidayCn({ year: 2027, days: [] }, 2027)).toThrow("还没有 2027 年");
+  });
+
+  it("下载失败时换下一个地址", async () => {
+    const urls: string[] = [];
+    const fake = (async (url: string) => {
+      urls.push(url);
+      if (urls.length === 1) throw new Error("连不上");
+      return new Response(JSON.stringify(sample));
+    }) as unknown as typeof fetch;
+    expect(Object.keys(await fetchHolidays(2026, fake))).toHaveLength(3);
+    expect(urls[1]).toContain("fastly.jsdelivr.net");
+  });
+
+  it("放假不算漏记，周末补班要记；手动设置的不被导入覆盖", async () => {
+    const db = openDb(":memory:");
+    wr.setSpecialDay(db, "2026-10-09", "work"); // 手动设成要上班
+    const s = wr.importHolidays(db, 2026, parseHolidayCn(sample, 2026));
+    expect(s.holidayYears).toEqual([2026]);
+    expect(isWorkday(s, "2026-10-01")).toBe(false); // 国庆，周四
+    expect(isWorkday(s, "2026-10-10")).toBe(true); // 补班，周六
+    expect(isWorkday(s, "2026-10-09")).toBe(true); // 手动设置的保留
+    const d = { ...data([]), settings: s };
+    expect(dayStatus(d, "2026-10-01", "2026-10-20")).toBeNull();
+    expect(dayStatus(d, "2026-10-10", "2026-10-20")).toBe("missed");
+    expect(wr.setSpecialDay(db, "2026-10-09", null).specialDays["2026-10-09"]).toBeUndefined();
+  });
+
+  it("补班的周六也提醒写日报，放假不提醒", async () => {
+    const db = openDb(":memory:");
+    const sent: string[] = [];
+    const send = async (_c: unknown, m: { title: string }) => void sent.push(m.title);
+    setNotifyConfig(db, { ...DEFAULT_NOTIFY, target: "https://example.test/hook" });
+    wr.setWorkSettings(db, { ...DEFAULT_WORK_SETTINGS, remindDaily: true });
+    wr.importHolidays(db, 2026, parseHolidayCn(sample, 2026));
+    // 10-10 周六补班 17:31（上海时间）
+    expect(await runWorkRemind(db, new Date(Date.UTC(2026, 9, 10, 9, 31)), send)).toEqual(["daily:sent"]);
+    // 10-01 国庆
+    expect(await runWorkRemind(db, new Date(Date.UTC(2026, 9, 1, 9, 31)), send)).toEqual([]);
   });
 });

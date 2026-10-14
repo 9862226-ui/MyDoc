@@ -1,7 +1,16 @@
 import type { DB } from "./db";
 import { getNotifyConfig, sendMessage, type Message, type Sender } from "./notify";
 import { zonedNow } from "./settings";
-import { buildDaily, buildWeekly, dayStatus, reportKey, shiftDate, weekStart, type WorkData } from "./worklog";
+import {
+  buildDaily,
+  buildWeekly,
+  dayStatus,
+  isWorkday,
+  reportKey,
+  shiftDate,
+  weekStart,
+  type WorkData,
+} from "./worklog";
 import { getRemindState, getWorkSettings, getWorkWeek, setRemindState } from "./worklog-repo";
 
 /** 下班提醒：到点推送到微信、钉钉，提醒写日报、交周报，消息里带上整理好的内容 */
@@ -97,13 +106,7 @@ export async function runWorkRemind(db: DB, now = new Date(), send: Sender = sen
   // 已经标记提交的就不再提醒
   const dailyDone = !!data.reports[reportKey("daily", t.date)]?.submittedAt;
   const weeklyDone = !!data.reports[reportKey("weekly", week)]?.submittedAt;
-  if (
-    s.remindDaily &&
-    !dailyDone &&
-    s.remindDays.includes(day) &&
-    state.daily !== t.date &&
-    isDue(s.remindTime, t.local)
-  ) {
+  if (s.remindDaily && !dailyDone && isWorkday(s, t.date) && state.daily !== t.date && isDue(s.remindTime, t.local)) {
     due.push({ kind: "daily", key: t.date });
   }
   if (s.remindWeekly && !weeklyDone && s.weeklyDay === day && state.weekly !== week && isDue(s.weeklyTime, t.local)) {
