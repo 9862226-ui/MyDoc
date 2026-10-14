@@ -66,6 +66,17 @@ const REF_BADGE: Record<RefTarget["type"], string> = {
   link: "bg-accent-soft text-accent-text",
 };
 
+/** 输入框高度跟着内容走；看不见时（宽度为 0）恢复按行数显示 */
+function fitHeight(el: HTMLTextAreaElement | null, grow: boolean | undefined) {
+  if (!grow || !el) return;
+  if (!el.offsetWidth) {
+    el.style.height = "";
+    return;
+  }
+  el.style.height = "auto";
+  el.style.height = `${el.scrollHeight + 2}px`;
+}
+
 /**
  * Markdown 编辑框：工具栏、快捷键（Ctrl+B 加粗、Ctrl+Enter 保存、Tab 缩进）、回车自动接着写列表、
  * 编辑 / 预览切换、草稿自动保存。
@@ -160,13 +171,21 @@ export function MarkdownEditor({
     } else setPick(null);
   };
 
-  // 跟着内容变高；超过大半屏后在框里滚动
-  useLayoutEffect(() => {
+  // 跟着内容变高；超过大半屏后在框里滚动。
+  // 看不见的时候（窗口还没真正打开）量出来是 0，先不设高度，等显示出来（宽度变了）再量
+  useLayoutEffect(() => fitHeight(ref.current, grow), [grow, value, preview]);
+  useEffect(() => {
     const el = ref.current;
-    if (!grow || !el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight + 2}px`;
-  }, [grow, value, preview]);
+    if (!grow || !el || typeof ResizeObserver === "undefined") return;
+    let width = el.offsetWidth;
+    const ro = new ResizeObserver(() => {
+      if (el.offsetWidth === width) return;
+      width = el.offsetWidth;
+      fitHeight(el, grow);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [grow, preview]);
 
   // 打开时如果有上次没保存的草稿，提示恢复
   useEffect(() => {
