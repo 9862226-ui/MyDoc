@@ -6,6 +6,7 @@
 #   sudo bash /opt/mydoc/deploy.sh
 #
 # 以后更新：再运行一次 sudo bash /opt/mydoc/deploy.sh
+# 每次更新前会自动备份数据库；新版本有问题时可以退回上一个版本：sudo bash /opt/mydoc/deploy.sh --rollback
 #
 # 自动选择运行方式：较新的系统直接安装 Node.js 22 并注册成 systemd 服务；
 # 较老的系统（如 CentOS 7、阿里云 Linux 2/3）安装 Docker，在容器里运行。
@@ -17,6 +18,7 @@
 #   --no-pull           不从 GitHub 拉取最新代码，直接用当前目录的代码
 #   --docker            强制用 Docker 运行
 #   --overseas          使用官方源（服务器在国外时）
+#   --rollback          退回到上一次部署的版本（只退代码，数据不动）
 #   -h, --help          显示帮助
 
 set -euo pipefail
@@ -32,6 +34,8 @@ SERVICE_USER=mydoc
 CONFIG_DIR=/etc/mydoc
 ENV_FILE=$CONFIG_DIR/mydoc.env
 DEFAULT_DIR=/opt/mydoc
+# 数据库文件、上一次部署的版本记录（都在数据目录里，APP_DIR 确定后再拼路径）
+DB_NAME=mydoc.db
 REPO_URL=${REPO_URL:-https://github.com/9862226-ui/MyDoc.git}
 # 直接运行需要的最低 glibc 版本（数据库驱动的预编译文件要求 2.34）
 MIN_GLIBC=2.34
@@ -41,6 +45,7 @@ RESET_PASSWORD=0
 PULL=1
 OVERSEAS=0
 FORCE_DOCKER=0
+ROLLBACK=0
 
 # ---------- 输出 ----------
 if [ -t 1 ]; then
@@ -57,7 +62,7 @@ die() {
 }
 
 usage() {
-  sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -71,6 +76,7 @@ while [ $# -gt 0 ]; do
     --no-pull) PULL=0 ;;
     --docker) FORCE_DOCKER=1 ;;
     --overseas) OVERSEAS=1 ;;
+    --rollback) ROLLBACK=1 ;;
     -h | --help) usage ;;
     *) die "不认识的选项：$1（用 --help 查看说明）" ;;
   esac
@@ -156,6 +162,7 @@ if [ -f "$SCRIPT_DIR/package.json" ] && grep -q '"name": "mydoc"' "$SCRIPT_DIR/p
 else
   APP_DIR=$DEFAULT_DIR
 fi
+PREV_FILE=$APP_DIR/data/.previous-version
 
 # ---------- 1. 系统软件 ----------
 step "检查系统软件（$OS_NAME）"
@@ -225,10 +232,24 @@ if [ ! -f "$APP_DIR/package.json" ]; then
   git clone --depth 1 "$REPO_URL" "$APP_DIR" ||
     die "下载代码失败。可以在电脑上从 GitHub 下载 ZIP，解压后上传到 $APP_DIR，再运行：bash $APP_DIR/deploy.sh --no-pull"
   exec bash "$APP_DIR/deploy.sh" ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"} --no-pull
+elif [ "$ROLLBACK" = 1 ]; then
+  [ -d "$APP_DIR/.git" ] || die "这个目录不是用 git 下载的，没法退回版本"
+  PREV=$(cat "$PREV_FILE" 2>/dev/null || true)
+  [ -n "$PREV" ] && git_ cat-file -e "$PREV^{commit}" 2>/dev/null ||
+    die "没有找到上一次部署的版本记录（只有通过本脚本更新过才能退回）"
+  git_ reset -q --hard "$PREV"
+  rm -f "$PREV_FILE"
+  ok "已退回到：$(git_ log -1 --format='%h %s')"
+  echo "  数据没有改动。新版本修好后，再正常运行一次本脚本就会更新到最新"
 elif [ "$PULL" = 1 ] && [ -d "$APP_DIR/.git" ]; then
   OLD_HEAD=$(git_ rev-parse HEAD)
   if git_ pull --ff-only; then
     ok "代码已更新到最新：$(git_ log -1 --format='%h %s')"
+    # 记下更新前的版本，新版本有问题时可以 --rollback 退回
+    if [ "$OLD_HEAD" != "$(git_ rev-parse HEAD)" ]; then
+      mkdir -p "$APP_DIR/data"
+      echo "$OLD_HEAD" >"$PREV_FILE"
+    fi
     # 部署脚本本身更新了：用新脚本重新运行
     if ! git_ diff --quiet "$OLD_HEAD" HEAD -- deploy.sh; then
       echo "部署脚本有更新，用新版本继续"
@@ -239,6 +260,12 @@ elif [ "$PULL" = 1 ] && [ -d "$APP_DIR/.git" ]; then
   fi
 else
   ok "使用当前目录的代码"
+fi
+
+# 记下当前版本，网页「设置 › 账号与安全」里会显示
+if [ -d "$APP_DIR/.git" ]; then
+  mkdir -p "$APP_DIR/data"
+  git_ log -1 --format='{"commit":"%h","date":"%cd"}' --date=format:'%Y-%m-%d %H:%M' >"$APP_DIR/data/version.json" || true
 fi
 
 # ---------- 3. 登录密码和配置 ----------
@@ -344,6 +371,7 @@ echo "  还打不开的话，去云服务器控制台的「安全组 / 防火墙
 echo
 echo "  常用命令："
 echo "    更新版本   sudo bash $APP_DIR/deploy.sh"
+echo "    退回上一版 sudo bash $APP_DIR/deploy.sh --rollback"
 echo "    修改密码   sudo bash $APP_DIR/deploy.sh --reset-password"
 if [ "$MODE" = native ]; then
   echo "    查看状态   systemctl status $SERVICE"
@@ -363,6 +391,29 @@ wait_ready() {
     sleep 1
   done
   return 1
+}
+
+# 更新前备份数据库到 data/backups/upgrade-时间.db，保留最近 5 份。
+# 参数 online=1 表示服务还在运行：在容器里用 SQLite 的在线备份；否则直接复制文件
+backup_before_upgrade() {
+  local online=${1:-0} db="$APP_DIR/data/$DB_NAME" dir="$APP_DIR/data/backups" name f
+  [ -f "$db" ] || return 0
+  mkdir -p "$dir"
+  name="upgrade-$(date +%Y%m%d-%H%M%S).db"
+  if [ "$online" = 1 ] && docker exec mydoc node -e '
+    const D = require("better-sqlite3");
+    new D("/app/data/'"$DB_NAME"'", { readonly: true }).backup(process.argv[1]).then(
+      () => process.exit(0),
+      (e) => { console.error(e.message); process.exit(1); },
+    );' "/app/data/backups/$name" >/dev/null 2>&1; then
+    :
+  else
+    cp "$db" "$dir/$name" || { warn "备份数据库失败，继续更新"; return 0; }
+    # 还没写回主文件的改动在 -wal 里，一起复制
+    [ -f "$db-wal" ] && cp "$db-wal" "$dir/$name-wal"
+  fi
+  ok "已备份数据库：$dir/$name"
+  ls -1t "$dir"/upgrade-*.db 2>/dev/null | tail -n +6 | while read -r f; do rm -f "$f" "$f-wal"; done
 }
 
 # ---------- 直接运行：Node.js + systemd ----------
@@ -410,6 +461,8 @@ deploy_native() {
     systemctl stop "$SERVICE"
     warn "已暂停服务，构建完成后自动启动"
   fi
+  # 服务已经停了，直接复制数据库文件
+  backup_before_upgrade 0
 
   step "安装依赖（$NPM_REGISTRY）"
   cd "$APP_DIR"
@@ -604,6 +657,11 @@ EOF
 
   step "构建并启动（第一次大约 3~5 分钟）"
   mkdir -p "$APP_DIR/data"
+  if docker ps --format '{{.Names}}' | grep -qx mydoc; then
+    backup_before_upgrade 1
+  else
+    backup_before_upgrade 0
+  fi
   BUILD_LOG=$(mktemp)
   if ! (cd "$APP_DIR" && docker compose up -d --build) >"$BUILD_LOG" 2>&1; then
     tail -40 "$BUILD_LOG"

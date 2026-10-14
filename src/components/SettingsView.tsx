@@ -2,6 +2,7 @@
 
 import { Bookmark, Copy, Info } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import useSWR from "swr";
 import { api, copyText, refreshData, useAppData } from "@/lib/client";
 import type { Tag } from "@/lib/types";
 import { AiSection } from "./AiSettings";
@@ -341,8 +342,17 @@ function TagRow({ tag, count }: { tag: Tag; count: number }) {
 
 function AccountSection() {
   const [busy, setBusy] = useState(false);
+  const { data: version } = useSWR("/api/version", (url: string) => api<{ commit: string | null; date: string }>(url));
   return (
     <Card title="账号与安全">
+      <Row
+        title="当前版本"
+        description={
+          version?.commit
+            ? `${version.commit}，${version.date} 更新。更新：sudo bash /opt/mydoc/deploy.sh；有问题时退回上一版：加 --rollback`
+            : "开发环境，没有版本信息（用部署脚本更新后会显示）"
+        }
+      />
       <Row title="登录密码" description="在服务器的环境变量 APP_PASSWORD 里设置，修改后重启服务生效" />
       <Row
         title="登录保持"

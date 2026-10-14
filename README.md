@@ -86,7 +86,8 @@ sudo bash -c 'set -e; command -v git >/dev/null || { if command -v apt-get >/dev
 
 | 操作 | 命令 |
 |---|---|
-| 更新到最新版本 | `sudo bash /opt/mydoc/deploy.sh` |
+| 更新到最新版本（更新前自动备份数据库到 `data/backups/upgrade-*.db`） | `sudo bash /opt/mydoc/deploy.sh` |
+| 新版本有问题，退回上一版（只退代码，数据不动） | `sudo bash /opt/mydoc/deploy.sh --rollback` |
 | 修改登录密码 | `sudo bash /opt/mydoc/deploy.sh --reset-password` |
 | 换端口（第一次部署时） | `sudo bash /opt/mydoc/deploy.sh --port 8080` |
 | 强制用 Docker 运行 | `sudo bash /opt/mydoc/deploy.sh --docker` |
