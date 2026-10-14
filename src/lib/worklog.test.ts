@@ -3,8 +3,16 @@ import { openDb, type DB } from "./db";
 import {
   buildDaily,
   buildWeekly,
+  dayStats,
   DEFAULT_WORK_SETTINGS,
+  filterLogs,
+  isMissed,
   isoWeek,
+  logsCsv,
+  monthGrid,
+  projectTotals,
+  shiftMonth,
+  weeksWithLogs,
   numbered,
   numberedInline,
   splitEntries,
@@ -249,5 +257,47 @@ describe("下班提醒", () => {
   it("提醒时间判断", () => {
     expect(isDue("17:30", new Date(2026, 9, 16, 17, 30))).toBe(true);
     expect(isDue("17:30", new Date(2026, 9, 16, 20, 31))).toBe(false);
+  });
+});
+
+describe("日历和周报列表", () => {
+  it("月历从周一开始补齐整周", () => {
+    const g = monthGrid("2026-10");
+    expect(g[0]).toBe("2026-09-28");
+    expect(g.at(-1)).toBe("2026-11-01");
+    expect(g.length % 7).toBe(0);
+    expect(shiftMonth("2026-01", -1)).toBe("2025-12");
+    expect(shiftMonth("2026-12", 1)).toBe("2027-01");
+  });
+
+  it("统计每天、每个项目，找出漏写的工作日", () => {
+    const d = data([
+      log({ date: "2026-10-12", content: "a" }),
+      log({ date: "2026-10-12", content: "b", projectId: 2, hours: 2 }),
+      log({ date: "2026-10-14", content: "c", done: false }),
+    ]);
+    const stats = dayStats(d);
+    expect(stats.get("2026-10-12")).toEqual({ count: 2, hours: 8, undone: 0 });
+    expect(stats.get("2026-10-14")?.undone).toBe(1);
+    expect(isMissed("2026-10-13", "2026-10-15", stats, [1, 2, 3, 4, 5])).toBe(true);
+    expect(isMissed("2026-10-11", "2026-10-15", stats, [1, 2, 3, 4, 5])).toBe(false); // 周日
+    expect(isMissed("2026-10-16", "2026-10-15", stats, [1, 2, 3, 4, 5])).toBe(false); // 还没到
+    expect(projectTotals(d, "2026-10-12", "2026-10-18")).toEqual([
+      { projectId: 1, name: "智能造价系统", hours: 14, count: 2 },
+      { projectId: 2, name: "数据平台", hours: 2, count: 1 },
+    ]);
+    expect(weeksWithLogs([...d.logs, log({ date: "2026-10-01" })])).toEqual(["2026-10-12", "2026-09-28"]);
+  });
+
+  it("检索和导出", () => {
+    const logs = [
+      log({ date: "2026-10-12", content: "修复切片问题" }),
+      log({ date: "2026-10-13", content: "写接口, 联调", projectId: 2 }),
+    ];
+    expect(filterLogs(logs, "切片", "all").map((l) => l.content)).toEqual(["修复切片问题"]);
+    expect(filterLogs(logs, "", 2)).toHaveLength(1);
+    const csv = logsCsv(logs, data([]).projects);
+    expect(csv.split("\r\n")[0]).toBe("日期,周几,时段,项目,工作内容,工时,状态");
+    expect(csv).toContain('2026-10-13,周二,上午,数据平台,"写接口, 联调",,已完成');
   });
 });

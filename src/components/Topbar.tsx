@@ -28,7 +28,7 @@ const SIMPLE_TITLES: Record<string, PageTitle> = {
   "/expiring": { title: "到期提醒", parent: "/projects" },
   "/reminders": { title: "到期提醒", parent: "/projects" },
   "/snippets": { title: "摘录", parent: "/projects" },
-  "/work": { title: "工作记录", parent: "/projects" },
+  "/work": { title: "工作记录" },
   "/all": { title: "全部链接", parent: "/projects" },
   "/recent": { title: "最近访问", parent: "/" },
   "/trash": { title: "回收站", parent: "/projects" },
@@ -164,6 +164,7 @@ export function MobileHeader() {
 
 const TABS: { href: string; label: string; icon: NavIconName; match: (p: string) => boolean }[] = [
   { href: "/", label: "工作台", icon: "home", match: (p) => p === "/" || p === "/recent" },
+  { href: "/work", label: "工作", icon: "work", match: (p) => p === "/work" },
   {
     href: "/projects",
     label: "项目",
@@ -207,7 +208,7 @@ export function TabBar() {
       )}
       <nav
         aria-label="底部导航"
-        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-line bg-bg pb-[env(safe-area-inset-bottom)] md:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-bg pb-[env(safe-area-inset-bottom)] md:hidden"
       >
         {TABS.map((t) => {
           const active = t.match(pathname);

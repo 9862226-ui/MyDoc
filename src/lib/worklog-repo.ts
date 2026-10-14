@@ -259,3 +259,28 @@ export function getWorkWeek(db: DB, date: string): WorkData {
     remind: { pushReady: !!getNotifyConfig(db).target.trim(), last: getRemindState(db).last },
   };
 }
+
+/** 全部记录（日历、周报列表、检索用）；个人使用的数据量不大，一次取完 */
+export function getWorkAll(db: DB): WorkData {
+  const rows = db.prepare("SELECT kind, period_key, fields_json FROM work_reports").all() as {
+    kind: ReportKind;
+    period_key: string;
+    fields_json: string;
+  }[];
+  const reports: WorkData["reports"] = {};
+  for (const r of rows) {
+    try {
+      reports[reportKey(r.kind, r.period_key)] = JSON.parse(r.fields_json);
+    } catch {
+      // 数据损坏时当作没改过
+    }
+  }
+  const logs = (db.prepare("SELECT * FROM work_logs ORDER BY date, created_at, id").all() as LogRow[]).map(toLog);
+  return {
+    projects: listWorkProjects(db),
+    logs,
+    settings: getWorkSettings(db),
+    reports,
+    remind: { pushReady: !!getNotifyConfig(db).target.trim(), last: getRemindState(db).last },
+  };
+}

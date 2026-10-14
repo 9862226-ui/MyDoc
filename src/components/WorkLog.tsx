@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import NextLink from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import useSWR from "swr";
+import useSWR, { mutate as revalidate } from "swr";
 import { api, copyText, readLocal, writeLocal } from "@/lib/client";
 import { localDate } from "@/lib/format";
 import {
@@ -24,6 +24,7 @@ import {
   buildWeekly,
   currentPeriod,
   dailyText,
+  isoWeek,
   shiftDate,
   splitEntries,
   weekdayLabel,
@@ -37,6 +38,8 @@ import {
   type WorkProject,
 } from "@/lib/worklog";
 import { LastResult } from "./settings-ui";
+import { WorkCalendar } from "./WorkCalendar";
+import { WorkHistory } from "./WorkHistory";
 import {
   Banner,
   Button,
@@ -54,7 +57,10 @@ import {
 } from "./ui";
 import { useUI } from "./ui-context";
 
-type Kind = "daily" | "weekly";
+type Kind = "daily" | "weekly" | "calendar";
+
+/** 改了数据后，日报、周报、日历都要刷新 */
+export const refreshWork = () => revalidate((k) => typeof k === "string" && k.startsWith("/api/work"));
 
 const workKey = (date: string) => `/api/work?date=${weekStart(date)}`;
 
@@ -90,16 +96,22 @@ export function WorkView() {
 
   useEffect(() => {
     const saved = readLocal<Kind>("mydoc.workTab", "daily");
-    if (saved === "weekly") setKind("weekly");
+    if (saved === "weekly" || saved === "calendar") setKind(saved);
   }, []);
 
   const run = async (fn: () => Promise<unknown>) => {
     try {
       await fn();
-      await mutate();
+      await Promise.all([mutate(), refreshWork()]);
     } catch (e) {
       ui.toast((e as Error).message, { kind: "error" });
     }
+  };
+
+  const openDay = (d: string) => {
+    setDate(d);
+    setKind("daily");
+    window.scrollTo({ top: 0 });
   };
 
   const step = kind === "daily" ? 1 : 7;
@@ -121,6 +133,14 @@ export function WorkView() {
           <p className="mt-0.5 text-[13px] text-muted">
             随手记下做了什么，按公司的格式整理成日报、周报，一项一项复制过去
           </p>
+        </div>
+        <div className="flex shrink-0 gap-1 md:hidden">
+          <IconButton label="下班提醒" onClick={() => setRemindOpen(true)}>
+            <Bell size={18} />
+          </IconButton>
+          <IconButton label="报工项目" onClick={() => setProjectsOpen(true)}>
+            <FolderCog size={18} />
+          </IconButton>
         </div>
         <div className="flex shrink-0 gap-2 max-md:hidden">
           <Button onClick={() => setRemindOpen(true)}>
@@ -145,50 +165,61 @@ export function WorkView() {
           items={[
             { value: "daily", label: "日报" },
             { value: "weekly", label: "周报" },
+            { value: "calendar", label: "日历" },
           ]}
         />
-        <div className="flex items-center gap-1 pb-1.5 max-md:w-full max-md:justify-between">
-          <IconButton label={kind === "daily" ? "前一天" : "上一周"} onClick={() => setDate(shiftDate(date, -step))}>
-            <ChevronLeft size={18} />
-          </IconButton>
-          <span className="text-center text-[15px] font-medium tabular-nums max-md:min-w-0 max-md:flex-1 md:min-w-[168px]">
-            {kind === "daily"
-              ? `${mmdd(date)} ${weekdayLabel(date)}`
-              : weekly
-                ? `第 ${weekly.week} 周 · ${mmdd(weekly.start)} ~ ${mmdd(weekly.end)}`
-                : ""}
-          </span>
-          <IconButton label={kind === "daily" ? "后一天" : "下一周"} onClick={() => setDate(shiftDate(date, step))}>
-            <ChevronRight size={18} />
-          </IconButton>
-          <Button size="sm" variant="ghost" disabled={isCurrent} onClick={() => setDate(today)} className="ml-1">
-            {kind === "daily" ? "今天" : "本周"}
-          </Button>
-          <IconButton label="下班提醒" onClick={() => setRemindOpen(true)} className="md:hidden">
-            <Bell size={18} />
-          </IconButton>
-          <IconButton label="报工项目" onClick={() => setProjectsOpen(true)} className="md:hidden">
-            <FolderCog size={18} />
-          </IconButton>
-        </div>
+        {kind !== "calendar" && (
+          <div className="flex items-center gap-1 pb-1.5 max-md:w-full max-md:justify-between">
+            <IconButton label={kind === "daily" ? "前一天" : "上一周"} onClick={() => setDate(shiftDate(date, -step))}>
+              <ChevronLeft size={18} />
+            </IconButton>
+            <span className="text-center text-[15px] font-medium tabular-nums max-md:min-w-0 max-md:flex-1 md:min-w-[230px]">
+              {kind === "daily"
+                ? `${mmdd(date)} ${weekdayLabel(date)} · 第 ${isoWeek(date)} 周`
+                : weekly
+                  ? `第 ${weekly.week} 周 · ${mmdd(weekly.start)} ~ ${mmdd(weekly.end)}`
+                  : ""}
+            </span>
+            <IconButton label={kind === "daily" ? "后一天" : "下一周"} onClick={() => setDate(shiftDate(date, step))}>
+              <ChevronRight size={18} />
+            </IconButton>
+            <Button size="sm" variant="ghost" disabled={isCurrent} onClick={() => setDate(today)} className="ml-1">
+              {kind === "daily" ? "今天" : "本周"}
+            </Button>
+          </div>
+        )}
       </div>
 
-      {!data || !daily || !weekly ? (
+      {kind === "calendar" ? (
+        <WorkCalendar
+          today={today}
+          onOpenDay={openDay}
+          onOpenWeek={(d) => {
+            setDate(d);
+            setKind("weekly");
+            window.scrollTo({ top: 0 });
+          }}
+        />
+      ) : !data || !daily || !weekly ? (
         <div className="grid gap-5 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
           <Skeleton className="h-64 rounded-xl" />
           <Skeleton className="h-96 rounded-xl" />
         </div>
       ) : (
         <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-          <div className="flex min-w-0 flex-col gap-4">
-            <Composer
-              data={data}
-              date={date}
-              onAdd={(body) => run(() => api("/api/work/logs", { body }))}
-              onManageProjects={() => setProjectsOpen(true)}
-            />
-            <LogList data={data} kind={kind} date={date} run={run} mutate={mutate} />
-          </div>
+          {kind === "daily" ? (
+            <div className="flex min-w-0 flex-col gap-4">
+              <Composer
+                data={data}
+                date={date}
+                onAdd={(body) => run(() => api("/api/work/logs", { body }))}
+                onManageProjects={() => setProjectsOpen(true)}
+              />
+              <LogList data={data} kind={kind} date={date} run={run} mutate={mutate} />
+            </div>
+          ) : (
+            <WorkHistory selected={weekStart(date)} today={today} onSelectWeek={setDate} onOpenDay={openDay} />
+          )}
           {kind === "daily" ? (
             <DailyCard report={daily} date={date} run={run} />
           ) : (
@@ -282,7 +313,7 @@ function Composer({
             onClick={onManageProjects}
             className="h-9 cursor-pointer rounded-md border border-dashed border-line-strong px-3 text-[13px] text-muted hover:border-accent/60 hover:text-fg"
           >
-            + 添加报工项目（项目名称、编号）
+            + 添加报工项目
           </button>
         )}
         <div role="radiogroup" aria-label="时段" className="flex shrink-0 rounded-md bg-field p-0.5">
@@ -677,12 +708,8 @@ function DailyCard({
               <div className="col-span-2">
                 <CopyCell label="项目名称" value={row.projectName} />
               </div>
-              <CopyCell label="任务名称" value={row.taskName} />
-              <CopyCell label="任务编号" value={row.taskCode} mono />
               <CopyCell label="任务状态" value={row.status} />
-              <CopyCell label="当前进度(%)" value={row.progress} mono />
               <CopyCell label="工时(小时)" value={row.hours} mono />
-              <CopyCell label="项目编号" value={row.projectCode} mono />
               <CopyCell label="今日工作内容" value={row.content} wide />
             </div>
           ))}
@@ -765,8 +792,7 @@ function WeeklyCard({
                 <CopyCell label="工作日期" value={d.date} mono />
                 <CopyCell label="周几" value={d.weekday} />
                 <CopyCell label="工时(h)" value={d.hours} mono />
-                <CopyCell label="项目编号" value={d.projectCode} mono />
-                <CopyCell label="所属项目名称" value={d.projectName} wide />
+                <CopyCell label="所属项目名称" value={d.projectName} />
                 <CopyCell label="工作内容描述" value={d.content} wide />
               </div>
             ))}
@@ -808,21 +834,12 @@ function ProjectsDialog({
     <Dialog
       open={open}
       onClose={onClose}
-      size="xl"
+      size="md"
       title="报工项目"
-      description="和公司系统里的项目对应起来，日报里的项目名称、编号、任务编号就能直接复制"
+      description="你在哪些项目上工作，记录时选一下，日报、周报就会按项目整理。和收藏链接的项目互不影响。"
       footer={<Button onClick={onClose}>完成</Button>}
     >
       <div className="flex flex-col gap-3">
-        {data.projects.length > 0 && (
-          <div aria-hidden className="flex gap-2 pr-[92px] text-xs text-faint max-sm:hidden">
-            <div className={cx(PROJECT_GRID, "flex-1 px-2.5")}>
-              {PROJECT_FIELDS.map((f) => (
-                <span key={f.key}>{f.label}</span>
-              ))}
-            </div>
-          </div>
-        )}
         {data.projects.map((p) => (
           <ProjectEditor
             key={p.id}
@@ -854,14 +871,12 @@ function ProjectsDialog({
   );
 }
 
-const PROJECT_FIELDS: { key: "name" | "code" | "taskName" | "taskCode"; label: string; placeholder: string }[] = [
-  { key: "name", label: "项目名称", placeholder: "例如：YE2026KF-智能造价管理系统" },
-  { key: "code", label: "项目编号", placeholder: "例如：10260510065" },
-  { key: "taskName", label: "任务名称", placeholder: "例如：临时任务" },
-  { key: "taskCode", label: "任务编号", placeholder: "例如：LSRW_001" },
+// 只维护项目名称；数据库里的编号字段保留，以后需要时再放出来
+const PROJECT_FIELDS: { key: "name"; label: string; placeholder: string }[] = [
+  { key: "name", label: "项目名称", placeholder: "项目名称，例如：智能造价管理系统" },
 ];
 
-const PROJECT_GRID = "grid gap-x-3 gap-y-2 sm:grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)]";
+const PROJECT_GRID = "grid";
 
 function ProjectFields({
   value,
@@ -878,7 +893,7 @@ function ProjectFields({
         <Input
           key={f.key}
           aria-label={f.label}
-          placeholder={f.key === "name" ? f.placeholder : f.label}
+          placeholder={f.placeholder}
           title={f.placeholder}
           value={value[f.key] ?? ""}
           onChange={(e) => onChange(f.key, e.target.value)}
@@ -934,7 +949,7 @@ function NewProject({ onAdd, first }: { onAdd: (body: object) => Promise<void>; 
   const add = async () => {
     if (!v.name?.trim()) return;
     setBusy(true);
-    await onAdd({ name: v.name.trim(), code: v.code ?? "", taskName: v.taskName ?? "", taskCode: v.taskCode ?? "" });
+    await onAdd({ name: v.name.trim() });
     setBusy(false);
     setV({});
     ref.current?.querySelector("input")?.focus();

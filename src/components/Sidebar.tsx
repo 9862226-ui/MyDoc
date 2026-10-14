@@ -199,57 +199,66 @@ export function Sidebar({ variant = "sidebar" }: { variant?: "sidebar" | "page" 
             />
             <QuickTile href="/snippets" icon="quote" label="摘录" count={data?.snippets.length ?? 0} />
             <QuickTile href="/all" icon="layers" label="全部链接" count={counts.all} />
-            <QuickTile href="/work" icon="work" label="工作记录" />
+            <QuickTile href="/recent" icon="clock" label="最近访问" />
             <QuickTile href="/trash" icon="trash" label="回收站" />
           </ul>
         ) : (
-          <ul className="flex flex-col gap-0.5">
-            <NavItem href="/" icon="home" label="工作台" active={pathname === "/"} />
-            <NavItem
-              href="/inbox"
-              icon="inbox"
-              label="收件箱"
-              count={counts.inbox}
-              active={pathname === "/inbox"}
-              dropActive={drop?.key === "inbox"}
-              onDragOver={(e) => {
-                if (!hasType(e, LINKS_MIME)) return;
-                e.preventDefault();
-                setDrop({ key: "inbox", mode: "into" });
-              }}
-              onDragLeave={dragLeave}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDrop(null);
-                const ids = linkIds(e);
-                if (ids.length) void actions.move(ids, null, "收件箱");
-              }}
-            />
-            <NavItem
-              href="/favorites"
-              icon="star"
-              label="我的收藏"
-              count={counts.favorites}
-              active={pathname === "/favorites"}
-            />
-            <NavItem
-              href={counts.reminders === 0 && counts.expiring > 0 ? "/expiring" : "/reminders"}
-              icon="alarm"
-              label="到期提醒"
-              count={counts.reminders + counts.expiring}
-              warn
-              active={pathname === "/reminders" || pathname === "/expiring"}
-            />
-            <NavItem
-              href="/snippets"
-              icon="quote"
-              label="摘录"
-              count={data?.snippets.length ?? 0}
-              active={pathname === "/snippets"}
-            />
-            <NavItem href="/work" icon="work" label="工作记录" active={pathname === "/work"} />
-            <NavItem href="/all" icon="layers" label="全部链接" count={counts.all} active={pathname === "/all"} />
-          </ul>
+          <>
+            <ul className="flex flex-col gap-0.5">
+              <NavItem href="/" icon="home" label="工作台" active={pathname === "/"} />
+            </ul>
+            {/* 工作记录和收藏是两个独立的模块，分开显示 */}
+            <SectionTitle>工作</SectionTitle>
+            <ul className="flex flex-col gap-0.5">
+              <NavItem href="/work" icon="work" label="工作记录" active={pathname === "/work"} />
+            </ul>
+            <SectionTitle>收藏</SectionTitle>
+            <ul className="flex flex-col gap-0.5">
+              <NavItem
+                href="/inbox"
+                icon="inbox"
+                label="收件箱"
+                count={counts.inbox}
+                active={pathname === "/inbox"}
+                dropActive={drop?.key === "inbox"}
+                onDragOver={(e) => {
+                  if (!hasType(e, LINKS_MIME)) return;
+                  e.preventDefault();
+                  setDrop({ key: "inbox", mode: "into" });
+                }}
+                onDragLeave={dragLeave}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDrop(null);
+                  const ids = linkIds(e);
+                  if (ids.length) void actions.move(ids, null, "收件箱");
+                }}
+              />
+              <NavItem
+                href="/favorites"
+                icon="star"
+                label="我的收藏"
+                count={counts.favorites}
+                active={pathname === "/favorites"}
+              />
+              <NavItem
+                href={counts.reminders === 0 && counts.expiring > 0 ? "/expiring" : "/reminders"}
+                icon="alarm"
+                label="到期提醒"
+                count={counts.reminders + counts.expiring}
+                warn
+                active={pathname === "/reminders" || pathname === "/expiring"}
+              />
+              <NavItem
+                href="/snippets"
+                icon="quote"
+                label="摘录"
+                count={data?.snippets.length ?? 0}
+                active={pathname === "/snippets"}
+              />
+              <NavItem href="/all" icon="layers" label="全部链接" count={counts.all} active={pathname === "/all"} />
+            </ul>
+          </>
         )}
 
         <SectionTitle

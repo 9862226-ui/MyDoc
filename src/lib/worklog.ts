@@ -378,3 +378,103 @@ export function weeklyText(r: WeeklyReport): string {
   if (r.plan.trim()) lines.push("", "下周计划：", r.plan);
   return lines.join("\n");
 }
+
+/* ---------- 日历、周报列表、检索 ---------- */
+
+/** 有记录的周（周一的日期），新的在前 */
+export function weeksWithLogs(logs: WorkLog[]): string[] {
+  return [...new Set(logs.map((l) => weekStart(l.date)))].sort().reverse();
+}
+
+/** 月历上要显示的日期：从包含 1 号那周的周一，到包含月底那周的周日 */
+export function monthGrid(month: string): string[] {
+  const first = `${month}-01`;
+  const [y, m] = month.split("-").map(Number);
+  const last = format(new Date(Date.UTC(y, m, 0)));
+  const days: string[] = [];
+  for (let d = weekStart(first); d <= shiftDate(weekStart(last), 6); d = shiftDate(d, 1)) days.push(d);
+  return days;
+}
+
+export const shiftMonth = (month: string, n: number) => {
+  const [y, m] = month.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + n, 1));
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}`;
+};
+
+export const weekdayOf = (date: string) => parse(date).getUTCDay();
+
+export interface DayStat {
+  count: number;
+  hours: number;
+  undone: number;
+}
+
+/** 每天记了几条、工时多少 */
+export function dayStats(data: WorkData): Map<string, DayStat> {
+  const out = new Map<string, DayStat>();
+  for (const date of new Set(data.logs.map((l) => l.date))) {
+    const logs = data.logs.filter((l) => l.date === date);
+    out.set(date, {
+      count: logs.length,
+      hours: buildDaily(data, date).hours,
+      undone: logs.filter((l) => !l.done).length,
+    });
+  }
+  return out;
+}
+
+/** 漏写的日子：在提醒日（默认周一到周五）里、已经过去、却没有记录 */
+export function isMissed(date: string, today: string, stats: Map<string, DayStat>, workdays: number[]): boolean {
+  return date < today && !stats.has(date) && workdays.includes(weekdayOf(date));
+}
+
+/** 某段时间里每个项目的工时和条数，工时多的在前 */
+export function projectTotals(data: WorkData, from: string, to: string) {
+  const totals = new Map<number | null, { name: string; hours: number; count: number }>();
+  for (const date of new Set(data.logs.filter((l) => l.date >= from && l.date <= to).map((l) => l.date))) {
+    const daily = buildDaily(data, date);
+    for (const row of daily.rows) {
+      const t = totals.get(row.projectId) ?? { name: row.projectName, hours: 0, count: 0 };
+      t.hours += row.hours;
+      t.count += data.logs.filter((l) => l.date === date && l.projectId === row.projectId).length;
+      totals.set(row.projectId, t);
+    }
+  }
+  return [...totals.entries()]
+    .map(([projectId, t]) => ({ projectId, ...t }))
+    .sort((a, b) => b.hours - a.hours || b.count - a.count);
+}
+
+/** 按关键字和项目筛选记录，新的在前；关键字可以用空格分开写多个 */
+export function filterLogs(logs: WorkLog[], q: string, projectId: number | null | "all"): WorkLog[] {
+  const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  return logs
+    .filter((l) => projectId === "all" || l.projectId === projectId)
+    .filter((l) => words.every((w) => l.content.toLowerCase().includes(w)))
+    .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+}
+
+const csvCell = (v: string | number) => {
+  const s = String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+
+/** 导出成 CSV（Excel 可以直接打开） */
+export function logsCsv(logs: WorkLog[], projects: WorkProject[]): string {
+  const name = (id: number | null) => projects.find((p) => p.id === id)?.name ?? "";
+  const rows = [...logs]
+    .sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt))
+    .map((l) => [
+      l.date,
+      weekdayLabel(l.date),
+      l.period === "am" ? "上午" : "下午",
+      name(l.projectId),
+      l.content,
+      l.hours ?? "",
+      l.done ? "已完成" : "未完成",
+    ]);
+  return [["日期", "周几", "时段", "项目", "工作内容", "工时", "状态"], ...rows]
+    .map((r) => r.map(csvCell).join(","))
+    .join("\r\n");
+}
