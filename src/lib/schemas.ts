@@ -445,10 +445,12 @@ export const workSettingsSchema = z
     weeklyDay: weekday,
     weeklyTime: clock,
     remindWithReport: z.boolean(),
+    remindDigest: z.boolean(),
+    digestTime: clock,
   })
   .partial();
 
-export const workRemindTestSchema = z.object({ kind: z.enum(["daily", "weekly"]) });
+export const workRemindTestSchema = z.object({ kind: z.enum(["daily", "weekly", "digest"]) });
 
 export const workAiSchema = z.object({ kind: z.literal("daily").default("daily"), date: workDate });
 

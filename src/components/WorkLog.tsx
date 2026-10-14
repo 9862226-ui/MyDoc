@@ -191,7 +191,7 @@ export function WorkView() {
         <div className="flex shrink-0 gap-2 max-md:hidden">
           <Button onClick={() => setRemindOpen(true)}>
             <Bell size={16} />
-            {data?.settings.remindDaily ? `每天 ${data.settings.remindTime} 提醒` : "下班提醒"}
+            {data?.settings.remindDaily ? `每天 ${data.settings.remindTime} 提醒` : "工作提醒"}
           </Button>
           <Button onClick={() => setProjectsOpen(true)}>
             <FolderCog size={16} />
@@ -1255,11 +1255,11 @@ function RemindDialog({
 }) {
   const ui = useUI();
   const s = data.settings;
-  const [testing, setTesting] = useState<Kind | null>(null);
+  const [testing, setTesting] = useState<"daily" | "weekly" | "digest" | null>(null);
   const save = (patch: Partial<WorkData["settings"]>) =>
     run(() => api("/api/work/settings", { method: "PUT", body: patch }));
 
-  const test = async (kind: Kind) => {
+  const test = async (kind: "daily" | "weekly" | "digest") => {
     setTesting(kind);
     try {
       await api("/api/work/remind", { body: { kind } });
@@ -1270,7 +1270,12 @@ function RemindDialog({
     setTesting(null);
   };
 
-  const timeInput = (label: string, value: string, key: "remindTime" | "weeklyTime", disabled: boolean) => (
+  const timeInput = (
+    label: string,
+    value: string,
+    key: "remindTime" | "weeklyTime" | "digestTime",
+    disabled: boolean,
+  ) => (
     <Input
       type="time"
       aria-label={label}
@@ -1285,8 +1290,8 @@ function RemindDialog({
     <Dialog
       open={open}
       onClose={onClose}
-      title="下班提醒"
-      description="到点推送到微信、钉钉，提醒写日报、交周报。消息里带上整理好的内容，在手机上就能直接复制。"
+      title="工作提醒"
+      description="到点推送到微信、钉钉：下班提醒写日报、交周报，消息里带上整理好的内容，在手机上就能直接复制；每周开工时推送上周回顾和本周计划。"
       footer={<Button onClick={onClose}>完成</Button>}
     >
       <div className="flex flex-col gap-5">
@@ -1375,6 +1380,28 @@ function RemindDialog({
               loading={testing === "weekly"}
               disabled={!data.remind.pushReady}
               onClick={() => void test("weekly")}
+            >
+              发一条试试
+            </Button>
+          </div>
+        </section>
+
+        <section className="flex flex-col gap-3">
+          <label className="flex cursor-pointer items-center gap-2 font-medium">
+            <Checkbox checked={s.remindDigest} onChange={(e) => void save({ remindDigest: e.target.checked })} />
+            每周开工提醒
+          </label>
+          <p className="-mt-1.5 pl-6 text-xs text-faint">
+            每周第一个工作日（周一放假就顺延）早上推送：上周做了什么、还有什么没收尾、本周计划、有风险的项目，点开直接安排今天的计划
+          </p>
+          <div className={cx("flex flex-wrap items-center gap-3 pl-6", !s.remindDigest && "opacity-50")}>
+            {timeInput("开工提醒时间", s.digestTime, "digestTime", !s.remindDigest)}
+            <Button
+              size="sm"
+              variant="ghost"
+              loading={testing === "digest"}
+              disabled={!data.remind.pushReady}
+              onClick={() => void test("digest")}
             >
               发一条试试
             </Button>

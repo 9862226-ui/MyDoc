@@ -56,6 +56,9 @@ export interface WorkSettings {
   weeklyTime: string;
   /** 提醒消息里带上整理好的日报、周报 */
   remindWithReport: boolean;
+  /** 每周第一个工作日早上推送上周回顾和本周计划 */
+  remindDigest: boolean;
+  digestTime: string;
   /** 法定节假日、调休补班和手动设置的休息日，按日期 */
   specialDays: Record<string, SpecialDay>;
   /** 已经导入过节假日安排的年份 */
@@ -71,6 +74,8 @@ export const DEFAULT_WORK_SETTINGS: WorkSettings = {
   weeklyDay: 5,
   weeklyTime: "16:00",
   remindWithReport: true,
+  remindDigest: false,
+  digestTime: "08:50",
   specialDays: {},
   holidayYears: [],
 };

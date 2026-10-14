@@ -34,6 +34,8 @@ export interface RemindState {
   /** 已经提醒过的日期 / 周（周一的日期） */
   daily?: string;
   weekly?: string;
+  /** 每周开工提醒（周一的日期） */
+  digest?: string;
   /** 推送失败的次数：同一次提醒最多试 3 次 */
   fails: Record<string, number>;
   last?: { at: string; ok: boolean; message: string };
