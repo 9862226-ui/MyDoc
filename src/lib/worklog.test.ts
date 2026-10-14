@@ -29,6 +29,8 @@ import {
   type WorkLog,
 } from "./worklog";
 import { DEFAULT_NOTIFY, setNotifyConfig } from "./notify";
+import * as repo from "./repo";
+import { backupSchema } from "./schemas";
 import { buildDailyPrompt } from "./worklog-ai";
 import { isDue, runWorkRemind } from "./worklog-remind";
 import * as wr from "./worklog-repo";
@@ -437,5 +439,38 @@ describe("下班提醒和提交状态", () => {
     expect(sent[0].text).toContain("本周还有 1 天日报没提交、3 天没有记录");
     wr.setReportFields(db, "weekly", "2026-10-12", { submittedAt: "2026-10-16T09:00:00Z" });
     expect(await runWorkRemind(db, new Date(Date.UTC(2026, 9, 16, 9, 40)), send)).toEqual([]);
+  });
+});
+
+describe("JSON 备份里的工作记录", () => {
+  it("导出后在另一个数据库恢复，再恢复一次不会重复", () => {
+    const db = openDb(":memory:");
+    const p = wr.createWorkProject(db, { name: "智能造价系统", code: "", taskName: "", taskCode: "", archived: false });
+    wr.createWorkLogs(db, [
+      { date: "2026-10-12", period: "am", projectId: p.id, content: "写接口", hours: 2, done: true },
+      { date: "2026-10-12", period: "pm", projectId: null, content: "开会", hours: null, done: false },
+    ]);
+    wr.setReportFields(db, "daily", "2026-10-12", { submittedAt: "2026-10-12T10:00:00Z" });
+    wr.setWorkSettings(db, { ...DEFAULT_WORK_SETTINGS, dailyHours: 7.5 });
+    const backup = backupSchema.parse(JSON.parse(JSON.stringify({ ...repo.exportBackup(db), work: wr.exportWork(db) })));
+
+    const db2 = openDb(":memory:");
+    const w = { ...backup.work!, settings: { ...DEFAULT_WORK_SETTINGS, ...backup.work!.settings } };
+    expect(wr.importWork(db2, w)).toBe(2);
+    expect(wr.importWork(db2, w)).toBe(0);
+    const data2 = wr.getWorkWeek(db2, "2026-10-12");
+    expect(data2.logs.map((l) => [l.content, data2.projects.find((x) => x.id === l.projectId)?.name ?? null])).toEqual([
+      ["写接口", "智能造价系统"],
+      ["开会", null],
+    ]);
+    expect(data2.reports["daily:2026-10-12"].submittedAt).toBe("2026-10-12T10:00:00Z");
+    expect(data2.settings.dailyHours).toBe(7.5);
+  });
+
+  it("以前没有工作记录的备份也能恢复", () => {
+    const db = openDb(":memory:");
+    const old = { app: "mydoc", version: 1, exportedAt: "", groups: [] };
+    expect(backupSchema.parse(old).work).toBeUndefined();
+    expect(repo.importBackup(db, backupSchema.parse(old)).imported).toBe(0);
   });
 });

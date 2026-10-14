@@ -286,3 +286,91 @@ export function getWorkAll(db: DB): WorkData {
     remind: { pushReady: !!getNotifyConfig(db).target.trim(), last: getRemindState(db).last },
   };
 }
+
+/* ---------- JSON 备份 ---------- */
+
+export interface WorkBackup {
+  projects: { name: string; code: string; taskName: string; taskCode: string; archived: boolean }[];
+  /** project 是项目名称，恢复时按名称找项目 */
+  logs: {
+    date: string;
+    period: Period;
+    project: string | null;
+    content: string;
+    hours: number | null;
+    done: boolean;
+    source: string;
+    createdAt: string;
+  }[];
+  reports: { kind: ReportKind; key: string; fields: Record<string, unknown> }[];
+  settings: WorkSettings;
+}
+
+export function exportWork(db: DB): WorkBackup {
+  const projects = listWorkProjects(db);
+  const name = (id: number | null) => projects.find((p) => p.id === id)?.name ?? null;
+  const logs = (db.prepare("SELECT * FROM work_logs ORDER BY date, created_at, id").all() as LogRow[]).map(toLog);
+  const reports = db.prepare("SELECT kind, period_key, fields_json FROM work_reports").all() as {
+    kind: ReportKind;
+    period_key: string;
+    fields_json: string;
+  }[];
+  return {
+    projects: projects.map(({ name, code, taskName, taskCode, archived }) => ({
+      name,
+      code,
+      taskName,
+      taskCode,
+      archived,
+    })),
+    logs: logs.map((l) => ({
+      date: l.date,
+      period: l.period,
+      project: name(l.projectId),
+      content: l.content,
+      hours: l.hours,
+      done: l.done,
+      source: l.source,
+      createdAt: l.createdAt,
+    })),
+    reports: reports.flatMap((r) => {
+      try {
+        return [{ kind: r.kind, key: r.period_key, fields: JSON.parse(r.fields_json) as Record<string, unknown> }];
+      } catch {
+        return [];
+      }
+    }),
+    settings: getWorkSettings(db),
+  };
+}
+
+/**
+ * 从备份恢复工作记录（合并，不删除现有数据）：项目按名称合并；同一天同一项目内容相同的记录跳过；
+ * 已经有的日报、周报整理结果和设置不覆盖。返回新增的记录条数
+ */
+export function importWork(db: DB, w: WorkBackup): number {
+  return db.transaction(() => {
+    const ids = new Map(listWorkProjects(db).map((p) => [p.name, p.id]));
+    for (const p of w.projects) {
+      if (!ids.has(p.name)) ids.set(p.name, createWorkProject(db, p).id);
+    }
+    const exists = db.prepare("SELECT 1 FROM work_logs WHERE date = ? AND content = ? AND project_id IS ?");
+    const insert = db.prepare(
+      `INSERT INTO work_logs (date, period, project_id, content, hours, done, source, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    let added = 0;
+    for (const l of w.logs) {
+      const projectId = l.project === null ? null : (ids.get(l.project) ?? null);
+      if (exists.get(l.date, l.content, projectId)) continue;
+      insert.run(l.date, l.period, projectId, l.content, l.hours, l.done ? 1 : 0, l.source, l.createdAt, now());
+      added++;
+    }
+    const hasReport = db.prepare("SELECT 1 FROM work_reports WHERE kind = ? AND period_key = ?");
+    for (const r of w.reports) {
+      if (!hasReport.get(r.kind, r.key)) setReportFields(db, r.kind, r.key, r.fields);
+    }
+    if (!db.prepare("SELECT 1 FROM settings WHERE key = ?").get(SETTINGS_KEY)) setWorkSettings(db, w.settings);
+    return added;
+  })();
+}

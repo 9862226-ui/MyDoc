@@ -229,6 +229,40 @@ export const backupSchema = z.object({
   inbox: z.array(backupLink).default([]),
   reminders: z.array(backupReminder).default([]),
   snippets: z.array(backupSnippet).default([]),
+  /** 工作记录（以前的备份没有这一项） */
+  work: z
+    .object({
+      projects: z.array(
+        z.object({
+          name: z.string().trim().min(1).max(120),
+          code: z.string().max(60).default(""),
+          taskName: z.string().max(60).default(""),
+          taskCode: z.string().max(60).default(""),
+          archived: z.boolean().default(false),
+        }),
+      ),
+      logs: z.array(
+        z.object({
+          date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          period: z.enum(["am", "pm"]),
+          project: z.string().nullable(),
+          content: z.string().trim().min(1).max(2000),
+          hours: z.number().min(0).max(24).nullable(),
+          done: z.boolean(),
+          source: z.string().max(20).default("web"),
+          createdAt: z.string(),
+        }),
+      ),
+      reports: z.array(
+        z.object({
+          kind: z.enum(["daily", "weekly"]),
+          key: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          fields: z.record(z.string(), z.unknown()),
+        }),
+      ),
+      settings: z.object({ dailyHours: z.number().min(0.5).max(24) }).passthrough(),
+    })
+    .optional(),
 });
 
 export const notifyConfigSchema = z.object({
