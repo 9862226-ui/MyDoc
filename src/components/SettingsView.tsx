@@ -16,18 +16,36 @@ import { useUI } from "./ui-context";
 
 type Section = "data" | "backup" | "notify" | "shares" | "ai" | "bookmarklet" | "mcp" | "tags" | "keys" | "account";
 
-const SECTIONS: [Section, string][] = [
-  ["data", "导入与导出"],
-  ["backup", "备份"],
-  ["notify", "提醒推送"],
-  ["shares", "分享链接"],
-  ["ai", "AI 模型"],
-  ["bookmarklet", "浏览器与手机"],
-  ["mcp", "AI 助手（MCP）"],
-  ["tags", "标签管理"],
-  ["keys", "快捷键"],
-  ["account", "账号与安全"],
+// 按用途分组显示；顺序就是导航里的顺序
+const GROUPS: { title: string; sections: [Section, string][] }[] = [
+  {
+    title: "数据",
+    sections: [
+      ["data", "导入与导出"],
+      ["backup", "备份"],
+    ],
+  },
+  {
+    title: "连接与扩展",
+    sections: [
+      ["ai", "AI 模型"],
+      ["mcp", "AI 助手（MCP）"],
+      ["notify", "提醒推送"],
+      ["bookmarklet", "浏览器与手机"],
+    ],
+  },
+  {
+    title: "管理",
+    sections: [
+      ["shares", "分享链接"],
+      ["tags", "标签管理"],
+      ["keys", "快捷键"],
+      ["account", "账号与安全"],
+    ],
+  },
 ];
+
+const SECTIONS = GROUPS.flatMap((g) => g.sections);
 
 const isSection = (s: string): s is Section => SECTIONS.some(([k]) => k === s);
 
@@ -45,6 +63,12 @@ export function SettingsView() {
     return () => window.removeEventListener("hashchange", read);
   }, []);
 
+  // 手机上分区是横向滚动的，从链接直接打开靠后的分区时把它滚到看得见的地方
+  const navRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    navRef.current?.querySelector("[aria-current]")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [section]);
+
   const pick = (s: Section) => {
     setSection(s);
     history.replaceState(null, "", `#${s}`);
@@ -54,24 +78,39 @@ export function SettingsView() {
     <div className="min-h-full bg-field dark:bg-bg">
       <div className="mx-auto flex max-w-[1080px] flex-col gap-4 p-4 md:flex-row md:items-start md:gap-6 md:p-6">
         <nav
+          ref={navRef}
           aria-label="设置分区"
           className="-mx-4 flex shrink-0 gap-1 overflow-x-auto px-4 md:mx-0 md:w-[200px] md:flex-col md:gap-0.5 md:rounded-lg md:bg-surface md:p-2"
         >
-          {SECTIONS.map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              aria-current={section === key ? "page" : undefined}
-              onClick={() => pick(key)}
-              className={cx(
-                "flex h-[38px] shrink-0 cursor-pointer items-center rounded-md px-3 text-left whitespace-nowrap transition-colors",
-                section === key
-                  ? "bg-accent-soft font-medium text-accent-text"
-                  : "text-fg hover:bg-hover max-md:bg-surface",
-              )}
-            >
-              {label}
-            </button>
+          {GROUPS.map((g, i) => (
+            <div key={g.title} role="group" aria-label={g.title} className="contents md:flex md:flex-col md:gap-0.5">
+              {/* 手机上横向滚动，分组之间用竖线隔开；桌面端显示分组标题 */}
+              {i > 0 && <span aria-hidden className="my-2 w-px shrink-0 bg-line-strong md:hidden" />}
+              <div
+                className={cx(
+                  "px-3 pb-1 text-xs text-faint max-md:hidden",
+                  i === 0 ? "pt-1.5" : "mt-2 border-t border-line pt-3.5",
+                )}
+              >
+                {g.title}
+              </div>
+              {g.sections.map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  aria-current={section === key ? "page" : undefined}
+                  onClick={() => pick(key)}
+                  className={cx(
+                    "flex h-[38px] shrink-0 cursor-pointer items-center rounded-md px-3 text-left whitespace-nowrap transition-colors md:w-full",
+                    section === key
+                      ? "bg-accent-soft font-medium text-accent-text"
+                      : "text-fg hover:bg-hover max-md:bg-surface",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           ))}
         </nav>
         <div className="flex min-w-0 flex-1 flex-col gap-4">

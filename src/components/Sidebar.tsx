@@ -155,7 +155,6 @@ export function Sidebar({ variant = "sidebar" }: { variant?: "sidebar" | "page" 
     });
 
   const archivedCount = data?.projects.filter((p) => p.archived).length ?? 0;
-  const rowH = page ? "h-11" : "h-9";
 
   return (
     <nav aria-label="主导航" className={cx("flex flex-col", page ? "px-2 pt-2 pb-4" : "h-full bg-side")}>
@@ -188,30 +187,44 @@ export function Sidebar({ variant = "sidebar" }: { variant?: "sidebar" | "page" 
       )}
 
       <div className={cx("flex flex-col gap-0.5", !page && "min-h-0 flex-1 overflow-y-auto px-3 pb-3")}>
-        <ul className="flex flex-col gap-0.5">
-          {!page && <NavItem href="/" icon="home" label="工作台" active={pathname === "/"} />}
-          <NavItem
-            href="/inbox"
-            icon="inbox"
-            label="收件箱"
-            count={counts.inbox}
-            active={pathname === "/inbox"}
-            className={rowH}
-            dropActive={drop?.key === "inbox"}
-            onDragOver={(e) => {
-              if (!hasType(e, LINKS_MIME)) return;
-              e.preventDefault();
-              setDrop({ key: "inbox", mode: "into" });
-            }}
-            onDragLeave={dragLeave}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDrop(null);
-              const ids = linkIds(e);
-              if (ids.length) void actions.move(ids, null, "收件箱");
-            }}
-          />
-          {!page && (
+        {page ? (
+          <ul aria-label="常用入口" className="grid grid-cols-3 gap-2 px-1 pt-1">
+            <QuickTile href="/inbox" icon="inbox" label="收件箱" count={counts.inbox} />
+            <QuickTile
+              href={counts.reminders === 0 && counts.expiring > 0 ? "/expiring" : "/reminders"}
+              icon="alarm"
+              label="到期提醒"
+              count={counts.reminders + counts.expiring}
+              warn
+            />
+            <QuickTile href="/snippets" icon="quote" label="摘录" count={data?.snippets.length ?? 0} />
+            <QuickTile href="/all" icon="layers" label="全部链接" count={counts.all} />
+            <QuickTile href="/recent" icon="clock" label="最近访问" />
+            <QuickTile href="/trash" icon="trash" label="回收站" />
+          </ul>
+        ) : (
+          <ul className="flex flex-col gap-0.5">
+            <NavItem href="/" icon="home" label="工作台" active={pathname === "/"} />
+            <NavItem
+              href="/inbox"
+              icon="inbox"
+              label="收件箱"
+              count={counts.inbox}
+              active={pathname === "/inbox"}
+              dropActive={drop?.key === "inbox"}
+              onDragOver={(e) => {
+                if (!hasType(e, LINKS_MIME)) return;
+                e.preventDefault();
+                setDrop({ key: "inbox", mode: "into" });
+              }}
+              onDragLeave={dragLeave}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDrop(null);
+                const ids = linkIds(e);
+                if (ids.length) void actions.move(ids, null, "收件箱");
+              }}
+            />
             <NavItem
               href="/favorites"
               icon="star"
@@ -219,36 +232,24 @@ export function Sidebar({ variant = "sidebar" }: { variant?: "sidebar" | "page" 
               count={counts.favorites}
               active={pathname === "/favorites"}
             />
-          )}
-          <NavItem
-            href={counts.reminders === 0 && counts.expiring > 0 ? "/expiring" : "/reminders"}
-            icon="alarm"
-            label="到期提醒"
-            count={counts.reminders + counts.expiring}
-            warn
-            active={pathname === "/reminders" || pathname === "/expiring"}
-            className={rowH}
-          />
-          <NavItem
-            href="/snippets"
-            icon="quote"
-            label="摘录"
-            count={data?.snippets.length ?? 0}
-            active={pathname === "/snippets"}
-            className={rowH}
-          />
-          <NavItem
-            href="/all"
-            icon="layers"
-            label="全部链接"
-            count={counts.all}
-            active={pathname === "/all"}
-            className={rowH}
-          />
-          {page && (
-            <NavItem href="/recent" icon="clock" label="最近访问" active={pathname === "/recent"} className={rowH} />
-          )}
-        </ul>
+            <NavItem
+              href={counts.reminders === 0 && counts.expiring > 0 ? "/expiring" : "/reminders"}
+              icon="alarm"
+              label="到期提醒"
+              count={counts.reminders + counts.expiring}
+              warn
+              active={pathname === "/reminders" || pathname === "/expiring"}
+            />
+            <NavItem
+              href="/snippets"
+              icon="quote"
+              label="摘录"
+              count={data?.snippets.length ?? 0}
+              active={pathname === "/snippets"}
+            />
+            <NavItem href="/all" icon="layers" label="全部链接" count={counts.all} active={pathname === "/all"} />
+          </ul>
+        )}
 
         <SectionTitle
           action={
@@ -543,12 +544,6 @@ export function Sidebar({ variant = "sidebar" }: { variant?: "sidebar" | "page" 
             )}
           </>
         )}
-
-        {page && (
-          <ul className="mt-4 flex flex-col gap-0.5">
-            <NavItem href="/trash" icon="trash" label="回收站" active={pathname === "/trash"} className={rowH} />
-          </ul>
-        )}
       </div>
 
       {!page && (
@@ -557,6 +552,46 @@ export function Sidebar({ variant = "sidebar" }: { variant?: "sidebar" | "page" 
         </ul>
       )}
     </nav>
+  );
+}
+
+/** 手机「项目」页顶部的快捷入口 */
+function QuickTile({
+  href,
+  icon,
+  label,
+  count,
+  warn,
+}: {
+  href: string;
+  icon: Parameters<typeof NavIcon>[0]["name"];
+  label: string;
+  count?: number;
+  warn?: boolean;
+}) {
+  const alert = warn && !!count;
+  return (
+    <li>
+      <NextLink
+        href={href}
+        className={cx(
+          "flex h-[76px] flex-col justify-between rounded-lg border p-3 active:bg-hover",
+          alert ? "border-warn/40 bg-warn-soft" : "border-line bg-surface",
+        )}
+      >
+        <div className="flex items-center justify-between">
+          <span className={alert ? "text-warn" : "text-muted"}>
+            <NavIcon name={icon} />
+          </span>
+          {!!count && (
+            <span className={cx("text-[13px] tabular-nums", alert ? "font-semibold text-warn-text" : "text-faint")}>
+              {count}
+            </span>
+          )}
+        </div>
+        <span className="truncate text-[13px] font-medium">{label}</span>
+      </NextLink>
+    </li>
   );
 }
 
