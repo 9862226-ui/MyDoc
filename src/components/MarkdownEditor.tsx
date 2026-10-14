@@ -4,6 +4,7 @@ import {
   Bold,
   Brackets,
   Code,
+  Paperclip,
   Heading2,
   Link2,
   List,
@@ -47,7 +48,7 @@ const TOOLS: (Tool | "|")[] = [
   { label: "代码", icon: Code, op: codeOp },
   { label: "链接", icon: Link2, op: linkOp },
   {
-    label: "引用（输入 [[ 也可以）",
+    label: "关联其他内容（输入 [[ 也可以）",
     icon: Brackets,
     // 插入 [[，选中的文字当搜索关键字
     op: (t, s, e) => {
@@ -117,6 +118,37 @@ export function MarkdownEditor({
     { keepPreviousData: true },
   );
   const results = pick ? (targets ?? []) : [];
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(0);
+  const [uploadError, setUploadError] = useState("");
+
+  /** 上传图片或文件，插到光标处：图片显示出来，其他文件是下载链接 */
+  const upload = async (files: File[]) => {
+    if (!files.length) return;
+    setUploadError("");
+    setUploading((n) => n + files.length);
+    for (const file of files) {
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        const res = await fetch("/api/attachments", { method: "POST", body: form });
+        const body = (await res.json()) as { url?: string; name?: string; mime?: string; error?: string };
+        if (!res.ok || !body.url) throw new Error(body.error ?? "上传失败");
+        const el = ref.current;
+        if (!el) continue;
+        const name = (body.name ?? file.name).replace(/[[\]\n]/g, " ");
+        const token = body.mime?.startsWith("image/") ? `![${name}](${body.url})` : `[📎 ${name}](${body.url})`;
+        const s = el.selectionStart;
+        const lineStart = s === 0 || el.value[s - 1] === "\n";
+        const insert = `${lineStart ? "" : "\n"}${token}\n`;
+        apply({ start: s, end: el.selectionEnd, insert, selStart: s + insert.length, selEnd: s + insert.length });
+      } catch (e) {
+        setUploadError(`「${file.name}」${(e as Error).message}`);
+      } finally {
+        setUploading((n) => n - 1);
+      }
+    }
+  };
 
   /** 光标前面是 [[关键字 时打开引用列表 */
   const detect = (el: HTMLTextAreaElement) => {
@@ -281,6 +313,27 @@ export function MarkdownEditor({
               bare ? "px-0" : "px-1.5",
             )}
           >
+            <button
+              type="button"
+              title="插入图片或附件（也可以直接粘贴、拖进来）"
+              aria-label="插入图片或附件"
+              tabIndex={-1}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => fileRef.current?.click()}
+              className="order-1 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded text-muted hover:bg-hover hover:text-fg"
+            >
+              <Paperclip size={15} />
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                void upload([...(e.target.files ?? [])]);
+                e.target.value = "";
+              }}
+            />
             {TOOLS.map((t, i) =>
               t === "|" ? (
                 <span key={i} aria-hidden className="mx-1 h-4 w-px shrink-0 bg-line-strong" />
@@ -304,7 +357,7 @@ export function MarkdownEditor({
             <div
               role="tablist"
               aria-label="编辑或预览"
-              className="ml-auto flex shrink-0 rounded bg-field p-0.5 text-xs"
+              className="order-2 ml-auto flex shrink-0 rounded bg-field p-0.5 text-xs"
             >
               {(["编辑", "预览"] as const).map((label, i) => (
                 <button
@@ -350,6 +403,22 @@ export function MarkdownEditor({
               detect(e.target);
             }}
             onKeyDown={onKeyDown}
+            onPaste={(e) => {
+              const files = markdown ? [...e.clipboardData.files] : [];
+              if (!files.length) return;
+              e.preventDefault();
+              void upload(files);
+            }}
+            onDragOver={(e) => {
+              if (markdown && e.dataTransfer.types.includes("Files")) e.preventDefault();
+            }}
+            onDrop={(e) => {
+              const files = markdown ? [...e.dataTransfer.files] : [];
+              if (!files.length) return;
+              e.preventDefault();
+              ref.current?.focus();
+              void upload(files);
+            }}
             onBlur={() => {
               // 等点击列表里的选项处理完再关
               setTimeout(() => setPick(null), 150);
@@ -362,24 +431,43 @@ export function MarkdownEditor({
             )}
           />
         )}
+        {(uploading > 0 || uploadError) && (
+          <div
+            className={cx(
+              "flex items-center gap-2 py-1 text-xs",
+              bare ? "px-0" : "px-2.5",
+              uploadError ? "text-danger-text" : "text-muted",
+            )}
+          >
+            <span className="min-w-0 flex-1 truncate">
+              {uploading > 0 ? `正在上传 ${uploading} 个文件…` : uploadError}
+            </span>
+            {uploadError && !uploading && (
+              <button type="button" onClick={() => setUploadError("")} className="cursor-pointer hover:underline">
+                知道了
+              </button>
+            )}
+          </div>
+        )}
         {markdown && !preview && !bare && (
           <div className="flex items-center gap-3 px-2.5 pb-1.5 text-[11px] text-faint max-sm:hidden">
             <span>支持 Markdown</span>
             <span>回车自动接着写列表</span>
             <span>Tab 缩进</span>
+            <span>可以粘贴、拖入图片和文件</span>
           </div>
         )}
       </div>
       {pick && (
         <div
           role="listbox"
-          aria-label="插入引用"
+          aria-label="关联内容"
           className="absolute inset-x-0 top-full z-30 mt-1 max-h-72 overflow-y-auto rounded-lg border border-line bg-menu p-1 shadow-pop"
         >
           <p className="px-2.5 pt-1.5 pb-1 text-xs text-faint">
             {pick.query
-              ? `搜索「${pick.query}」`
-              : "最近的工作记录和会议；输入关键字搜索工作记录、会议纪要、摘录、链接"}
+              ? `关联「${pick.query}」`
+              : "关联最近的工作记录和会议；输入关键字搜索工作记录、会议纪要、摘录、链接"}
             <span className="ml-2 max-sm:hidden">↑↓ 选择 · 回车插入 · Esc 关闭</span>
           </p>
           {results.length === 0 ? (

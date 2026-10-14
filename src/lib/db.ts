@@ -239,6 +239,18 @@ const MIGRATIONS: string[] = [
   ALTER TABLE snippets_new RENAME TO snippets;
   CREATE INDEX idx_snippets_project ON snippets(project_id);
   `,
+  // 附件：图片、文件。文件放在 data/attachments/ 下，按内容的 SHA-256 存，同样的文件只存一份
+  `
+  CREATE TABLE attachments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    mime TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    sha256 TEXT NOT NULL UNIQUE,
+    file TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  `,
 ];
 
 export function migrate(db: DB): void {

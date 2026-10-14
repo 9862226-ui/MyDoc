@@ -15,6 +15,15 @@ md.renderer.rules.link_open = (tokens, i, opts, env, self) => {
   return defaultLink(tokens, i, opts, env, self);
 };
 
+// 图片：懒加载，点一下在新标签页看原图
+md.renderer.rules.image = (tokens, i, opts, _env, self) => {
+  const t = tokens[i];
+  t.attrSet("alt", self.renderInlineAsText(t.children ?? [], opts, _env));
+  t.attrSet("loading", "lazy");
+  const src = md.utils.escapeHtml(String(t.attrGet("src") ?? ""));
+  return `<a href="${src}" target="_blank" rel="noopener noreferrer" class="md-image">${self.renderToken(tokens, i, opts)}</a>`;
+};
+
 // 正文里的 #标签 高亮（标签可以分层：#项目/知识库）
 const TAG_RE = /(^|[\s(（，,。；;])#([\p{L}\p{N}_\-/]+)/gu;
 md.renderer.rules.text = (tokens, i) =>

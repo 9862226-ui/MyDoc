@@ -6,7 +6,7 @@ import useSWR from "swr";
 import { api, copyText, refreshData, useAppData } from "@/lib/client";
 import type { Tag } from "@/lib/types";
 import { AiSection } from "./AiSettings";
-import { AutoBackupCard, BackupSyncCard } from "./BackupSettings";
+import { AutoBackupCard, BackupSyncCard, formatSize } from "./BackupSettings";
 import { ShortcutList } from "./HelpDialog";
 import { McpSection } from "./McpSettings";
 import { SharesSection } from "./ShareDialog";
@@ -163,23 +163,51 @@ function DataSection() {
   const ui = useUI();
   const fileRef = useRef<HTMLInputElement>(null);
   const [restoring, setRestoring] = useState(false);
+  const { data: files, mutate: mutateAttachments } = useSWR("/api/attachments", (url: string) =>
+    api<{ count: number; bytes: number; unused: number; unusedBytes: number }>(url),
+  );
+  const [cleaning, setCleaning] = useState(false);
+  const cleanup = async () => {
+    setCleaning(true);
+    try {
+      const r = await api<{ removed: number; bytes: number }>("/api/attachments/cleanup", { body: {} });
+      await mutateAttachments();
+      ui.toast(r.removed ? `已删除 ${r.removed} 个没用到的附件，腾出 ${formatSize(r.bytes)}` : "没有可以清理的附件");
+    } catch (e) {
+      ui.toast((e as Error).message, { kind: "error" });
+    }
+    setCleaning(false);
+  };
 
   const restore = async (file: File | undefined) => {
     if (!file) return;
     setRestoring(true);
     try {
-      let body: unknown;
-      try {
-        body = JSON.parse(await file.text());
-      } catch {
-        throw new Error("文件不是有效的 JSON 备份");
+      type Result = { imported: number; skipped: number; reminders: number; work: number; attachments?: number };
+      let r: Result;
+      if (/\.zip$/i.test(file.name)) {
+        // 完整备份：直接把 ZIP 文件发过去
+        const res = await fetch("/api/backup/zip", {
+          method: "POST",
+          headers: { "content-type": "application/zip" },
+          body: file,
+        });
+        const body = (await res.json()) as Result & { error?: string };
+        if (!res.ok) throw new Error(body.error ?? "恢复失败");
+        r = body;
+      } else {
+        let body: unknown;
+        try {
+          body = JSON.parse(await file.text());
+        } catch {
+          throw new Error("文件不是有效的 JSON 备份");
+        }
+        r = await api<Result>("/api/backup", { body });
       }
-      const r = await api<{ imported: number; skipped: number; reminders: number; work: number }>("/api/backup", {
-        body,
-      });
       await refreshData();
+      await mutateAttachments();
       ui.toast(
-        `已恢复 ${r.imported} 个链接${r.reminders ? `、${r.reminders} 个提醒` : ""}${r.work ? `、${r.work} 条工作记录` : ""}${r.skipped ? `，跳过 ${r.skipped} 个已存在的链接` : ""}`,
+        `已恢复 ${r.imported} 个链接${r.reminders ? `、${r.reminders} 个提醒` : ""}${r.work ? `、${r.work} 条工作记录` : ""}${r.attachments ? `、${r.attachments} 个附件` : ""}${r.skipped ? `，跳过 ${r.skipped} 个已存在的链接` : ""}`,
       );
     } catch (e) {
       ui.toast((e as Error).message, { kind: "error" });
@@ -191,9 +219,12 @@ function DataSection() {
 
   return (
     <>
-      <Card title="导出数据" description="随时把数据带走，三种格式任选">
+      <Card title="导出数据" description="随时把数据带走，四种格式任选">
         <Row title="JSON 备份" description="包含全部分组、项目、链接、标签、提醒、摘录和工作记录，可以用来恢复">
           <ExportLink format="json" />
+        </Row>
+        <Row title="完整备份（ZIP）" description="JSON 备份加上正文里所有的图片和附件，换服务器搬家、长期存档时用这个">
+          <ExportLink format="zip" />
         </Row>
         <Row title="CSV 表格" description="用 Excel 或 WPS 打开，方便查看和整理">
           <ExportLink format="csv" />
@@ -208,24 +239,45 @@ function DataSection() {
             批量导入
           </Button>
         </Row>
-        <Row title="从 JSON 备份恢复" description="按名称合并分组和项目，已有的链接和工作记录会跳过，不会删除现有数据">
+        <Row
+          title="从备份恢复"
+          description="选择 JSON 备份或完整备份（ZIP）。按名称合并分组和项目，已有的链接和工作记录会跳过，不会删除现有数据"
+        >
           <Button loading={restoring} onClick={() => fileRef.current?.click()}>
             选择文件
           </Button>
           <input
             ref={fileRef}
             type="file"
-            accept=".json,application/json"
+            accept=".json,.zip,application/json,application/zip"
             className="hidden"
             onChange={(e) => void restore(e.target.files?.[0])}
           />
+        </Row>
+      </Card>
+      <Card
+        title="图片和附件"
+        description="在编辑框里粘贴、拖入或点回形针上传的文件，保存在服务器的 data/attachments 文件夹"
+      >
+        <Row
+          title={files ? `${files.count} 个文件，共 ${formatSize(files.bytes)}` : "…"}
+          description={
+            files?.unused
+              ? `其中 ${files.unused} 个（${formatSize(files.unusedBytes)}）没有用在任何内容里，可以清理；一天内新传的会先留着`
+              : "都用在内容里了"
+          }
+        >
+          <Button loading={cleaning} disabled={!files?.unused} onClick={() => void cleanup()}>
+            清理没用到的
+          </Button>
         </Row>
       </Card>
       <section className="flex items-start gap-2.5 rounded-lg bg-surface px-5 py-4 text-[13px] text-muted md:px-6">
         <Info size={16} className="mt-[3px] shrink-0 text-icon" />
         <span>
           所有数据保存在服务器的 <code className="rounded bg-field px-1 font-mono">data/mydoc.db</code>{" "}
-          文件里，自动备份就是这个文件的完整副本。
+          文件里，自动备份就是这个文件的完整副本；图片和附件在 data/attachments
+          文件夹，要连同附件一起备份请用「完整备份（ZIP）」。
           {data && `当前共有 ${data.links.length} 个链接、${data.projects.length} 个项目、${data.tags.length} 个标签。`}
         </span>
       </section>
