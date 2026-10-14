@@ -858,11 +858,14 @@ function LogEditDialog({
 }) {
   const [v, setV] = useState(log);
   const [hours, setHours] = useState("");
+  // 项目、日期等设置默认折叠，记住上次是否展开
+  const [more, setMore] = useState(false);
   // 只在打开时读入；打开期间数据刷新也不覆盖正在改的内容
   useEffect(() => {
     if (!open) return;
     setV(log);
     setHours(log.hours === null ? "" : String(log.hours));
+    setMore(readLocal("mydoc.logDialogMore", false));
   }, [open]);
   // 停用的项目不再出现在选项里，除非这条记录本来就属于它
   const options = projects.filter((p) => !p.archived || p.id === log.projectId);
@@ -899,87 +902,114 @@ function LogEditDialog({
         </>
       }
     >
-      <div className="flex flex-col gap-4">
-        <Field label="工作内容" hint="一句话，会写进日报">
-          <Textarea
-            rows={2}
-            value={v.content}
-            onChange={(e) => setV({ ...v, content: e.target.value })}
-            className="leading-6"
-          />
-        </Field>
-        <Field label="明细" hint="过程、原因、改了哪些地方、链接…只留在这条记录里，不进日报" as="div">
-          <MarkdownEditor
-            grow
-            rows={6}
-            value={v.detail}
-            onChange={(detail) => setV({ ...v, detail })}
-            onSubmit={save}
-            aria-label="明细"
-            placeholder="支持列表、待办、加粗、链接，Ctrl + 回车保存"
-          />
-        </Field>
-        <Field label="报工项目">
-          <Select
-            value={v.projectId ?? ""}
-            onChange={(e) => setV({ ...v, projectId: e.target.value ? Number(e.target.value) : null })}
-          >
-            {options.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-                {p.archived ? "（已停用）" : ""}
-              </option>
-            ))}
-            <option value="">未选择项目</option>
-          </Select>
-        </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="日期">
-            <Input
-              type="date"
-              value={v.date}
-              onChange={(e) => e.target.value && setV({ ...v, date: e.target.value })}
-            />
-          </Field>
-          <Field label="时段" as="div">
-            <div role="radiogroup" aria-label="时段" className="flex h-9 rounded-md bg-field p-0.5">
-              {PERIODS.map((p) => (
-                <button
-                  key={p.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={v.period === p.value}
-                  onClick={() => setV({ ...v, period: p.value })}
-                  className={cx(
-                    "flex-1 cursor-pointer rounded text-[13px] transition-colors",
-                    v.period === p.value
-                      ? "bg-surface font-medium text-fg shadow-[0_1px_2px_var(--shadow)] dark:bg-chip"
-                      : "text-muted hover:text-fg",
-                  )}
+      <div className="flex flex-col gap-3">
+        <Textarea
+          rows={2}
+          aria-label="工作内容"
+          value={v.content}
+          placeholder="做了什么？一句话，会写进日报"
+          onChange={(e) => setV({ ...v, content: e.target.value })}
+          className="text-[15px] leading-6 font-medium"
+        />
+        <MarkdownEditor
+          grow
+          rows={10}
+          value={v.detail}
+          onChange={(detail) => setV({ ...v, detail })}
+          onSubmit={save}
+          aria-label="明细"
+          placeholder={
+            "明细：过程、原因、改了哪些地方、链接…\n只留在这条记录里，不进日报。支持列表、待办，Ctrl + 回车保存"
+          }
+        />
+        {/* 项目、日期、时段、工时平时很少改，折叠成一行；「已完成」常用，放在外面 */}
+        <div className="rounded-lg border border-line">
+          <div className="flex items-center gap-3 px-3 py-2">
+            <button
+              type="button"
+              aria-expanded={more}
+              onClick={() => {
+                setMore(!more);
+                writeLocal("mydoc.logDialogMore", !more);
+              }}
+              className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 text-left text-[13px] text-muted hover:text-fg"
+            >
+              <ChevronRight size={15} className={cx("shrink-0 transition-transform", more && "rotate-90")} />
+              <span className="truncate">
+                {[
+                  options.find((p) => p.id === v.projectId)?.name ?? "未选择项目",
+                  `${mmdd(v.date)} ${weekdayLabel(v.date)} ${v.period === "am" ? "上午" : "下午"}`,
+                  h === null ? "工时自动" : `${h} 小时`,
+                ].join(" · ")}
+              </span>
+            </button>
+            <label
+              className="flex shrink-0 cursor-pointer items-center gap-1.5 text-[13px]"
+              title="没完成的会放进下周计划的建议里"
+            >
+              <Checkbox checked={v.done} onChange={(e) => setV({ ...v, done: e.target.checked })} />
+              已完成
+            </label>
+          </div>
+          {more && (
+            <div className="grid gap-3 border-t border-line px-3 pt-3 pb-3.5 sm:grid-cols-2">
+              <Field label="报工项目" className="sm:col-span-2">
+                <Select
+                  value={v.projectId ?? ""}
+                  onChange={(e) => setV({ ...v, projectId: e.target.value ? Number(e.target.value) : null })}
                 >
-                  {p.label}
-                </button>
-              ))}
+                  {options.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                      {p.archived ? "（已停用）" : ""}
+                    </option>
+                  ))}
+                  <option value="">未选择项目</option>
+                </Select>
+              </Field>
+              <Field label="日期">
+                <Input
+                  type="date"
+                  value={v.date}
+                  onChange={(e) => e.target.value && setV({ ...v, date: e.target.value })}
+                />
+              </Field>
+              <Field label="时段" as="div">
+                <div role="radiogroup" aria-label="时段" className="flex h-9 rounded-md bg-field p-0.5">
+                  {PERIODS.map((p) => (
+                    <button
+                      key={p.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={v.period === p.value}
+                      onClick={() => setV({ ...v, period: p.value })}
+                      className={cx(
+                        "flex-1 cursor-pointer rounded text-[13px] transition-colors",
+                        v.period === p.value
+                          ? "bg-surface font-medium text-fg shadow-[0_1px_2px_var(--shadow)] dark:bg-chip"
+                          : "text-muted hover:text-fg",
+                      )}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+              <Field label="工时（小时）" hint="不填时按每天的正常工时平均分">
+                <Input
+                  type="number"
+                  min={0}
+                  max={24}
+                  step={0.5}
+                  value={hours}
+                  placeholder="自动"
+                  onChange={(e) => setHours(e.target.value)}
+                  className="w-32"
+                />
+              </Field>
             </div>
-          </Field>
+          )}
         </div>
-        <Field label="工时（小时）" hint="不填时按每天的正常工时平均分">
-          <Input
-            type="number"
-            min={0}
-            max={24}
-            step={0.5}
-            value={hours}
-            placeholder="自动"
-            onChange={(e) => setHours(e.target.value)}
-            className="w-32"
-          />
-        </Field>
-        <label className="flex cursor-pointer items-center gap-2">
-          <Checkbox checked={v.done} onChange={(e) => setV({ ...v, done: e.target.checked })} />
-          已完成
-          <span className="text-xs text-faint">没完成的会放进下周计划的建议里</span>
-        </label>
       </div>
     </Dialog>
   );
