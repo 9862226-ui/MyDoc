@@ -5,6 +5,7 @@ import NextLink from "next/link";
 import { useState, type ReactNode } from "react";
 import { useAppData } from "@/lib/client";
 import { expiryInfo, shortDate, shortTime } from "@/lib/format";
+import { plainText } from "@/lib/md-edit";
 import { platformLabel } from "@/lib/platforms";
 import { isReminderDue, reminderState, sortReminders } from "@/lib/reminders";
 import type { Link, Reminder, Snippet } from "@/lib/types";
@@ -179,7 +180,7 @@ function RecentSnippets({ snippets, index }: { snippets: Snippet[]; index: Retur
           </span>
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="truncate" title={s.content}>
-              {s.content.trim().split("\n")[0]}
+              {plainText(s.content)}
             </span>
             <span className="truncate text-xs leading-5 text-faint">
               {s.projectId === null ? "未放进项目" : projectPathLabel(index.get(s.projectId))}

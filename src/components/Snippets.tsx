@@ -5,6 +5,7 @@ import NextLink from "next/link";
 import { useMemo, useState, type ReactNode } from "react";
 import { api, copyText, refreshData, useAppData } from "@/lib/client";
 import { shortTime } from "@/lib/format";
+import { toggleTask } from "@/lib/md-edit";
 import type { AppData, Snippet } from "@/lib/types";
 import { projectIndex, projectPathLabel, snippetMatches } from "@/lib/view";
 import { ProjectPicker, TagInput } from "./fields";
@@ -22,8 +23,9 @@ import {
   SearchField,
   Skeleton,
   Tag,
-  Textarea,
 } from "./ui";
+import { Markdown } from "./Markdown";
+import { clearDraft, MarkdownEditor } from "./MarkdownEditor";
 import { useUI, type UI } from "./ui-context";
 
 export interface SnippetInit {
@@ -89,6 +91,8 @@ function SnippetForm({
   const [showSource, setShowSource] = useState(!!(sourceUrl || sourceTitle));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // 没保存的内容存成草稿：新建的共用一份，编辑的按摘录分开
+  const draftName = snippet ? `snippet-${snippet.id}` : "snippet-new";
 
   if (!data) return null;
 
@@ -101,6 +105,7 @@ function SnippetForm({
       if (snippet) await api(`/api/snippets/${snippet.id}`, { method: "PATCH", body });
       else await api("/api/snippets", { body });
       await refreshData();
+      clearDraft(draftName);
       ui.toast(snippet ? "已保存" : "已添加摘录");
       onSaved?.();
       onDone();
@@ -119,23 +124,17 @@ function SnippetForm({
       }}
     >
       {switchTo}
-      <Field label="内容" error={error}>
-        <Textarea
-          data-autofocus
+      <Field label="内容" error={error} as="div">
+        <MarkdownEditor
+          aria-label="内容"
+          autoFocus
           value={content}
-          onChange={(e) => setContent(e.target.value)}
-          onKeyDown={(e) => {
-            // Ctrl/⌘ + 回车 保存
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-              e.preventDefault();
-              void save();
-            }
-          }}
+          onChange={setContent}
+          onSubmit={() => void save()}
+          draft={draftName}
           rows={7}
-          maxLength={20000}
-          aria-invalid={!!error}
-          placeholder="粘贴或输入一段文字"
-          className="resize-y leading-6"
+          invalid={!!error}
+          placeholder="粘贴或输入一段文字，支持 Markdown：- [ ] 待办、**加粗**、#标签"
         />
       </Field>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -241,6 +240,9 @@ export function useSnippetActions() {
       const ok = await copyText(s.content);
       ui.toast(ok ? "已复制" : "复制失败", { kind: ok ? "ok" : "error" });
     },
+    /** 在卡片上直接给待办打勾 */
+    toggleTask: (s: Snippet, n: number) =>
+      run(() => api(`/api/snippets/${s.id}`, { method: "PATCH", body: { content: toggleTask(s.content, n) } })),
     togglePin: (s: Snippet) =>
       run(() => api(`/api/snippets/${s.id}`, { method: "PATCH", body: { pinned: !s.pinned } })),
     remove: (s: Snippet) =>
@@ -284,13 +286,8 @@ export function SnippetCard({
 
   return (
     <article className="group/snippet flex break-inside-avoid flex-col gap-2.5 rounded-lg border border-line bg-surface p-4 transition-shadow hover:shadow-card">
-      <div
-        className={cx(
-          "relative leading-6 break-words whitespace-pre-wrap",
-          long && !expanded && "max-h-48 overflow-hidden",
-        )}
-      >
-        {s.content}
+      <div className={cx("relative", long && !expanded && "max-h-48 overflow-hidden")}>
+        <Markdown text={s.content} onToggleTask={(n) => void actions.toggleTask(s, n)} />
         {long && !expanded && (
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-surface to-transparent" />
         )}

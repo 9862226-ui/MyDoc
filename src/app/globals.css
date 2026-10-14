@@ -212,3 +212,111 @@
     animation: none !important;
   }
 }
+
+/* Markdown 内容（摘录、会议纪要等） */
+.markdown {
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.markdown > :first-child {
+  margin-top: 0;
+}
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+.markdown :where(p, ul, ol, blockquote, pre, table) {
+  margin: 0.4em 0;
+}
+.markdown :where(h1, h2, h3, h4) {
+  margin: 0.8em 0 0.3em;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.markdown h1 {
+  font-size: 1.3em;
+}
+.markdown h2 {
+  font-size: 1.15em;
+}
+.markdown :where(h3, h4) {
+  font-size: 1em;
+}
+.markdown :where(ul, ol) {
+  padding-left: 1.4em;
+}
+.markdown ul {
+  list-style: disc;
+}
+.markdown ol {
+  list-style: decimal;
+}
+.markdown li > :where(ul, ol) {
+  margin: 0.1em 0;
+}
+.markdown li.md-task-item {
+  list-style: none;
+  margin-left: -1.3em;
+}
+.markdown li.md-task-done {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.markdown input.md-task {
+  width: 15px;
+  height: 15px;
+  margin: 0 0.35em 0 0;
+  vertical-align: -2px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.markdown input.md-task:disabled {
+  cursor: default;
+}
+.markdown blockquote {
+  padding-left: 0.8em;
+  border-left: 3px solid var(--line-strong);
+  color: var(--muted);
+}
+.markdown code {
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: var(--field);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+.markdown pre {
+  padding: 0.7em 0.9em;
+  border-radius: 6px;
+  background: var(--field);
+  overflow-x: auto;
+}
+.markdown pre code {
+  padding: 0;
+  background: none;
+}
+.markdown a {
+  color: var(--accent-text);
+}
+.markdown a:hover {
+  text-decoration: underline;
+}
+.markdown hr {
+  margin: 0.8em 0;
+  border-color: var(--line);
+}
+.markdown table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+.markdown :where(th, td) {
+  padding: 0.3em 0.7em;
+  border: 1px solid var(--line);
+}
+.markdown th {
+  background: var(--field);
+  font-weight: 600;
+}
+.markdown .md-tag {
+  color: var(--accent-text);
+}

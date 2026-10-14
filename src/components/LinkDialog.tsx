@@ -22,9 +22,9 @@ import {
   Input,
   Spinner,
   Tag,
-  Textarea,
   useModKey,
 } from "./ui";
+import { MarkdownEditor } from "./MarkdownEditor";
 import { useLinkActions, useUI, type LinkInit } from "./ui-context";
 
 type TitleStatus = "idle" | "loading" | "failed";
@@ -357,13 +357,14 @@ function LinkForm({
         </div>
       </Field>
 
-      <Field label="备注">
-        <Textarea
+      <Field label="备注" as="div">
+        <MarkdownEditor
+          aria-label="备注"
           value={note}
-          onChange={(e) => setNote(e.target.value)}
+          onChange={setNote}
+          onSubmit={() => void save()}
           rows={2}
           placeholder="可选，比如这个链接是谁发的、用来做什么"
-          className="resize-y"
         />
       </Field>
 

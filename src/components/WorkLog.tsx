@@ -39,6 +39,7 @@ import {
   type WorkLog,
   type WorkProject,
 } from "@/lib/worklog";
+import { MarkdownEditor } from "./MarkdownEditor";
 import { LastResult } from "./settings-ui";
 import { CopyCell, refreshWork, ReportCard, StatusBadge, SubmitButton, useCopy, useSubmit } from "./work-ui";
 import { WeeklyEditor } from "./WeeklyEditor";
@@ -736,16 +737,17 @@ function SummaryField({
           复制
         </Button>
       </div>
-      <Textarea
+      {/* 要原样粘贴到公司系统，不用 Markdown 格式；回车会自动接着编号 */}
+      <MarkdownEditor
         id={id}
+        markdown={false}
         rows={Math.min(10, Math.max(3, draft.split("\n").length + 1))}
         value={draft}
         placeholder={`添加记录后自动生成${label}`}
-        onChange={(e) => setDraft(e.target.value)}
+        onChange={setDraft}
         onBlur={() => {
           if (draft !== value) void onSave(draft === auto ? null : draft);
         }}
-        className="leading-6"
       />
     </div>
   );

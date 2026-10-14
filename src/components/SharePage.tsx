@@ -7,6 +7,7 @@ import { copyText } from "@/lib/client";
 import { expiryInfo, shortTime } from "@/lib/format";
 import { platformLabel } from "@/lib/platforms";
 import type { SharedProject } from "@/lib/shares";
+import { Markdown } from "./Markdown";
 import { Button, cx, DocIcon, Input, Logo, ProjectBadge, Tag } from "./ui";
 
 /** 分享页的外框：顶部品牌、居中的内容 */
@@ -151,7 +152,7 @@ export function SharedProjectView({ data }: { data: SharedProject }) {
                         </Tag>
                       )}
                     </div>
-                    {l.note && <p className="mt-1 text-[13px] whitespace-pre-wrap text-muted">{l.note}</p>}
+                    {l.note && <Markdown text={l.note} className="mt-1 text-[13px] text-muted" />}
                   </div>
                   {l.accessCode && (
                     <button

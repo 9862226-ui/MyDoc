@@ -16,6 +16,7 @@ import NextLink from "next/link";
 import type { DragEvent } from "react";
 import { copyText } from "@/lib/client";
 import { expiryInfo, shortTime } from "@/lib/format";
+import { plainText } from "@/lib/md-edit";
 import { platformLabel } from "@/lib/platforms";
 import type { Link } from "@/lib/types";
 import { Checkbox, cx, DocIcon, IconButton, Menu, ProjectDot, StarIcon, Tag, type MenuItem } from "./ui";
@@ -307,7 +308,7 @@ export function LinkCard({ link, project, selected, selecting, onSelect, onDragS
         <span className="truncate text-xs leading-5 text-faint">{platformLabel(link.url)}</span>
       </div>
 
-      {link.note && <p className="-mt-1.5 line-clamp-2 text-[13px] text-muted">{link.note}</p>}
+      {link.note && <p className="-mt-1.5 line-clamp-2 text-[13px] text-muted">{plainText(link.note)}</p>}
 
       <dl className="flex flex-col gap-1.5 border-t border-line-soft pt-3 text-[13px]">
         {project && (

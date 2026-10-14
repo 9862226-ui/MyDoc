@@ -4,6 +4,7 @@ import { NotebookPen, Quote, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { copyText, useAppData } from "@/lib/client";
+import { plainText } from "@/lib/md-edit";
 import { platformLabel } from "@/lib/platforms";
 import type { Link, Snippet } from "@/lib/types";
 import { pinyinHits, projectIndex, projectPathLabel, search, type ProjectInfo } from "@/lib/view";
@@ -22,7 +23,7 @@ type Scope = "all" | "links" | "projects" | "snippets" | "work";
 const WORK_LIMIT = 8;
 
 /** 摘录在列表里只显示第一行 */
-const firstLine = (text: string) => text.trim().split(/\n/)[0].slice(0, 120);
+const firstLine = (text: string) => plainText(text).slice(0, 120);
 
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
