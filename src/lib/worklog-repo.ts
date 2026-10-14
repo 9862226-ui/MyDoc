@@ -4,6 +4,7 @@ import type { SpecialDay } from "./holidays";
 import { createMeeting, listMeetings } from "./meeting-repo";
 import { getNotifyConfig } from "./notify";
 import { pinyinIndex } from "./pinyin";
+import type { ImportRefs } from "./ref-remap";
 import { getSetting, setSetting } from "./settings";
 import {
   DEFAULT_WORK_SETTINGS,
@@ -320,6 +321,8 @@ export interface WorkBackup {
   projects: { name: string; code: string; taskName: string; taskCode: string; archived: boolean }[];
   /** project 是项目名称，恢复时按名称找项目 */
   logs: {
+    /** 原来的编号（恢复时对应引用 [[log:12]]；旧版本的备份没有） */
+    id?: number;
     date: string;
     period: Period;
     project: string | null;
@@ -335,6 +338,7 @@ export interface WorkBackup {
   settings: WorkSettings;
   /** 会议纪要；project 是报工项目名称 */
   meetings?: {
+    id?: number;
     title: string;
     date: string;
     project: string | null;
@@ -365,6 +369,7 @@ export function exportWork(db: DB): WorkBackup {
       archived,
     })),
     logs: logs.map((l) => ({
+      id: l.id,
       date: l.date,
       period: l.period,
       project: name(l.projectId),
@@ -384,6 +389,7 @@ export function exportWork(db: DB): WorkBackup {
     }),
     settings: getWorkSettings(db),
     meetings: listMeetings(db).map((m) => ({
+      id: m.id,
       title: m.title,
       date: m.date,
       project: name(m.projectId),
@@ -405,13 +411,13 @@ export function exportWork(db: DB): WorkBackup {
  * 从备份恢复工作记录（合并，不删除现有数据）：项目按名称合并；同一天同一项目内容相同的记录跳过；
  * 已经有的日报、周报整理结果和设置不覆盖。返回新增的记录条数
  */
-export function importWork(db: DB, w: WorkBackup): number {
+export function importWork(db: DB, w: WorkBackup, refs?: ImportRefs): number {
   return db.transaction(() => {
     const ids = new Map(listWorkProjects(db).map((p) => [p.name, p.id]));
     for (const p of w.projects) {
       if (!ids.has(p.name)) ids.set(p.name, createWorkProject(db, p).id);
     }
-    const exists = db.prepare("SELECT 1 FROM work_logs WHERE date = ? AND content = ? AND project_id IS ?");
+    const exists = db.prepare("SELECT id FROM work_logs WHERE date = ? AND content = ? AND project_id IS ?");
     const insert = db.prepare(
       `INSERT INTO work_logs (date, period, project_id, content, detail, hours, done, source, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -419,8 +425,12 @@ export function importWork(db: DB, w: WorkBackup): number {
     let added = 0;
     for (const l of w.logs) {
       const projectId = l.project === null ? null : (ids.get(l.project) ?? null);
-      if (exists.get(l.date, l.content, projectId)) continue;
-      insert.run(
+      const same = exists.get(l.date, l.content, projectId) as { id: number } | undefined;
+      if (same) {
+        refs?.add("log", l.id, same.id, false);
+        continue;
+      }
+      const r = insert.run(
         l.date,
         l.period,
         projectId,
@@ -432,18 +442,30 @@ export function importWork(db: DB, w: WorkBackup): number {
         l.createdAt,
         now(),
       );
+      refs?.add("log", l.id, Number(r.lastInsertRowid), true);
       added++;
     }
     const hasReport = db.prepare("SELECT 1 FROM work_reports WHERE kind = ? AND period_key = ?");
     for (const r of w.reports) {
-      if (!hasReport.get(r.kind, r.key)) setReportFields(db, r.kind, r.key, r.fields);
+      if (hasReport.get(r.kind, r.key)) continue;
+      setReportFields(db, r.kind, r.key, r.fields);
+      if (r.kind === "daily") refs?.addDailyReport(r.key);
     }
     if (!db.prepare("SELECT 1 FROM settings WHERE key = ?").get(SETTINGS_KEY)) setWorkSettings(db, w.settings);
     // 会议纪要：同一天同名的跳过
-    const hasMeeting = db.prepare("SELECT 1 FROM meetings WHERE date = ? AND title = ?");
+    const hasMeeting = db.prepare("SELECT id FROM meetings WHERE date = ? AND title = ?");
     for (const m of w.meetings ?? []) {
-      if (hasMeeting.get(m.date, m.title)) continue;
-      createMeeting(db, { ...m, projectId: m.project === null ? null : (ids.get(m.project) ?? null) }, m.createdAt);
+      const same = hasMeeting.get(m.date, m.title) as { id: number } | undefined;
+      if (same) {
+        refs?.add("meeting", m.id, same.id, false);
+        continue;
+      }
+      const created = createMeeting(
+        db,
+        { ...m, projectId: m.project === null ? null : (ids.get(m.project) ?? null) },
+        m.createdAt,
+      );
+      refs?.add("meeting", m.id, created.id, true);
     }
     // 项目进展：已经写过的那一周不覆盖
     const hasUpdate = db.prepare("SELECT 1 FROM work_project_updates WHERE project_id = ? AND week = ?");

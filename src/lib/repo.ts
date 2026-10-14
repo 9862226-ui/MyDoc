@@ -1,6 +1,7 @@
 import type { DB } from "./db";
 import { HttpError } from "./errors";
 import { pinyinIndex } from "./pinyin";
+import type { ImportRefs } from "./ref-remap";
 import { createSnippet, listSnippets } from "./snippet-repo";
 import { importReminders, listReminders, toBackupReminder, type BackupReminder } from "./reminder-repo";
 import type { AppData, Group, Link, Project, Tag } from "./types";
@@ -265,10 +266,9 @@ export function renameTag(db: DB, id: number, name: string): void {
       | { id: number }
       | undefined;
     if (existing) {
-      db.prepare("INSERT OR IGNORE INTO link_tags (link_id, tag_id) SELECT link_id, ? FROM link_tags WHERE tag_id = ?").run(
-        existing.id,
-        id,
-      );
+      db.prepare(
+        "INSERT OR IGNORE INTO link_tags (link_id, tag_id) SELECT link_id, ? FROM link_tags WHERE tag_id = ?",
+      ).run(existing.id, id);
       db.prepare("DELETE FROM tags WHERE id = ?").run(id);
     } else if (!db.prepare("UPDATE tags SET name = ? WHERE id = ?").run(clean, id).changes) {
       throw new HttpError(404, "标签不存在");
@@ -423,9 +423,7 @@ export function importLinks(
 ): { imported: number; skipped: number } {
   if (opts.projectId !== null) assertProject(db, opts.projectId);
   const existing = new Set(
-    (db.prepare("SELECT url FROM links WHERE deleted_at IS NULL").all() as { url: string }[]).map((r) =>
-      urlKey(r.url),
-    ),
+    (db.prepare("SELECT url FROM links WHERE deleted_at IS NULL").all() as { url: string }[]).map((r) => urlKey(r.url)),
   );
   let imported = 0;
   let skipped = 0;
@@ -455,6 +453,8 @@ export function importLinks(
 }
 
 export interface BackupLink {
+  /** 原来的编号（恢复时把引用 [[link:12]] 换成新编号；旧版本的备份没有） */
+  id?: number;
   title: string;
   url: string;
   note: string;
@@ -472,10 +472,7 @@ export interface Backup {
   app: "mydoc";
   version: 1;
   exportedAt: string;
-  groups: {
-    name: string;
-    projects: { name: string; description: string; archived: boolean; links: BackupLink[] }[];
-  }[];
+  groups: { name: string; projects: { name: string; description: string; archived: boolean; links: BackupLink[] }[] }[];
   inbox: BackupLink[];
   reminders?: BackupReminder[];
   snippets?: BackupSnippet[];
@@ -483,6 +480,7 @@ export interface Backup {
 
 function toBackupLink(l: Link): BackupLink {
   return {
+    id: l.id,
     title: l.title,
     url: l.url,
     note: l.note,
@@ -500,7 +498,10 @@ function toBackupLink(l: Link): BackupLink {
 export function exportBackup(db: DB): Backup {
   const data = getAppData(db);
   const linksOf = (projectId: number | null) =>
-    data.links.filter((l) => l.projectId === projectId).sort((a, b) => a.id - b.id).map(toBackupLink);
+    data.links
+      .filter((l) => l.projectId === projectId)
+      .sort((a, b) => a.id - b.id)
+      .map(toBackupLink);
   return {
     app: "mydoc",
     version: 1,
@@ -517,6 +518,7 @@ export function exportBackup(db: DB): Backup {
       const p = data.projects.find((x) => x.id === s.projectId);
       const g = p && data.groups.find((x) => x.id === p.groupId);
       return {
+        id: s.id,
         content: s.content,
         group: g?.name ?? null,
         project: p?.name ?? null,
@@ -532,6 +534,7 @@ export function exportBackup(db: DB): Backup {
 
 /** 从备份恢复：按名称合并分组和项目，已存在的链接跳过 */
 export interface BackupSnippet {
+  id?: number;
   content: string;
   /** 所在的分组和项目名称，恢复时按名称找项目 */
   group: string | null;
@@ -544,16 +547,22 @@ export interface BackupSnippet {
 }
 
 /** 从备份恢复摘录：内容完全相同的跳过 */
-function importSnippets(db: DB, list: BackupSnippet[]): number {
-  const exists = db.prepare("SELECT 1 FROM snippets WHERE content = ?");
+function importSnippets(db: DB, list: BackupSnippet[], refs?: ImportRefs): number {
+  const exists = db.prepare("SELECT id FROM snippets WHERE content = ?");
   const findProject = db.prepare(
     "SELECT p.id FROM projects p JOIN link_groups g ON g.id = p.group_id WHERE g.name = ? AND p.name = ?",
   );
   let added = 0;
   for (const s of list) {
-    if (!s.content.trim() || exists.get(s.content)) continue;
-    const found = s.group && s.project ? (findProject.get(s.group, s.project) as { id: number } | undefined) : undefined;
-    createSnippet(
+    if (!s.content.trim()) continue;
+    const same = exists.get(s.content) as { id: number } | undefined;
+    if (same) {
+      refs?.add("snippet", s.id, same.id, false);
+      continue;
+    }
+    const found =
+      s.group && s.project ? (findProject.get(s.group, s.project) as { id: number } | undefined) : undefined;
+    const created = createSnippet(
       db,
       {
         content: s.content,
@@ -565,6 +574,7 @@ function importSnippets(db: DB, list: BackupSnippet[]): number {
       },
       s.createdAt,
     );
+    refs?.add("snippet", s.id, created.id, true);
     added++;
   }
   return added;
@@ -573,10 +583,12 @@ function importSnippets(db: DB, list: BackupSnippet[]): number {
 export function importBackup(
   db: DB,
   backup: Backup,
+  refs?: ImportRefs,
 ): { imported: number; skipped: number; reminders: number; snippets: number } {
-  const existing = new Set(
-    (db.prepare("SELECT url FROM links WHERE deleted_at IS NULL").all() as { url: string }[]).map((r) =>
-      urlKey(r.url),
+  // 已有的链接：网址 → 编号（跳过时把引用对应到已有的这条）
+  const existing = new Map(
+    (db.prepare("SELECT id, url FROM links WHERE deleted_at IS NULL").all() as { id: number; url: string }[]).map(
+      (r) => [urlKey(r.url), r.id],
     ),
   );
   let imported = 0;
@@ -590,11 +602,12 @@ export function importBackup(
   const addLinks = (projectId: number | null, links: BackupLink[]) => {
     for (const l of links) {
       const key = urlKey(l.url);
-      if (existing.has(key)) {
+      const same = existing.get(key);
+      if (same !== undefined) {
+        refs?.add("link", l.id, same, false);
         skipped++;
         continue;
       }
-      existing.add(key);
       const r = insert.run(
         projectId,
         l.title,
@@ -609,7 +622,10 @@ export function importBackup(
         l.createdAt,
         now(),
       );
-      setLinkTags(db, Number(r.lastInsertRowid), l.tags);
+      const newId = Number(r.lastInsertRowid);
+      existing.set(key, newId);
+      refs?.add("link", l.id, newId, true);
+      setLinkTags(db, newId, l.tags);
       imported++;
     }
   };
@@ -619,9 +635,9 @@ export function importBackup(
       const found = db.prepare("SELECT id FROM link_groups WHERE name = ?").get(g.name) as { id: number } | undefined;
       const groupId = found?.id ?? createGroup(db, g.name).id;
       for (const p of g.projects) {
-        const foundProject = db.prepare("SELECT id FROM projects WHERE group_id = ? AND name = ?").get(groupId, p.name) as
-          | { id: number }
-          | undefined;
+        const foundProject = db
+          .prepare("SELECT id FROM projects WHERE group_id = ? AND name = ?")
+          .get(groupId, p.name) as { id: number } | undefined;
         let projectId = foundProject?.id;
         if (!projectId) {
           projectId = createProject(db, { groupId, name: p.name, description: p.description }).id;
@@ -632,7 +648,7 @@ export function importBackup(
     }
     addLinks(null, backup.inbox);
     reminders = importReminders(db, backup.reminders ?? []);
-    snippets = importSnippets(db, backup.snippets ?? []);
+    snippets = importSnippets(db, backup.snippets ?? [], refs);
   })();
   return { imported, skipped, reminders, snippets };
 }

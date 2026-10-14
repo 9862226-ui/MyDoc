@@ -4,6 +4,7 @@
  */
 import { listAttachments, readAttachmentFile, saveAttachment } from "./attachment-repo";
 import type { DB } from "./db";
+import { ImportRefs } from "./ref-remap";
 import { HttpError } from "./errors";
 import { exportBackup, importBackup } from "./repo";
 import { backupSchema } from "./schemas";
@@ -54,11 +55,16 @@ export function exportZip(db: DB, now = new Date()): Buffer {
 /** 从 JSON 备份恢复（合并） */
 export function restoreJson(db: DB, raw: unknown) {
   const backup = backupSchema.parse(raw);
-  const result = importBackup(db, backup);
-  const work = backup.work
-    ? importWork(db, { ...backup.work, settings: { ...DEFAULT_WORK_SETTINGS, ...backup.work.settings } })
-    : 0;
-  return { ...result, work };
+  // 记下编号的对应关系，最后把内容里的引用 [[log:12]] 换成这里的编号
+  const refs = new ImportRefs();
+  return db.transaction(() => {
+    const result = importBackup(db, backup, refs);
+    const work = backup.work
+      ? importWork(db, { ...backup.work, settings: { ...DEFAULT_WORK_SETTINGS, ...backup.work.settings } }, refs)
+      : 0;
+    refs.apply(db);
+    return { ...result, work };
+  })();
 }
 
 /** 从完整备份恢复：先恢复附件，把正文里的附件地址换成新的 id，再恢复数据 */

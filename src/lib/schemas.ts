@@ -153,7 +153,11 @@ const backupReminder = z.object({
   createdAt: z.string().default(() => new Date().toISOString()),
 });
 
+/** 备份里内容原来的编号（恢复时对应内容引用） */
+const backupId = id.optional();
+
 const backupLink = z.object({
+  id: backupId,
   title: z.string().max(200),
   url: urlSchema,
   note: z.string().default(""),
@@ -168,6 +172,7 @@ const backupLink = z.object({
 });
 
 const backupSnippet = z.object({
+  id: backupId,
   content: z.string().max(20000),
   group: z.string().nullable().default(null),
   project: z.string().nullable().default(null),
@@ -244,6 +249,7 @@ export const backupSchema = z.object({
       ),
       logs: z.array(
         z.object({
+          id: backupId,
           date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
           period: z.enum(["am", "pm"]),
           project: z.string().nullable(),
@@ -266,6 +272,7 @@ export const backupSchema = z.object({
       meetings: z
         .array(
           z.object({
+            id: backupId,
             title: z.string().trim().min(1).max(200),
             date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
             project: z.string().nullable(),
