@@ -1,6 +1,7 @@
 import type { DB } from "./db";
 import { HttpError } from "./errors";
 import { getNotifyConfig } from "./notify";
+import { pinyinIndex } from "./pinyin";
 import { getSetting, setSetting } from "./settings";
 import {
   DEFAULT_WORK_SETTINGS,
@@ -277,9 +278,13 @@ export function getWorkAll(db: DB): WorkData {
       // 数据损坏时当作没改过
     }
   }
+  const projects = listWorkProjects(db);
+  const projectName = (id: number | null) => projects.find((p) => p.id === id)?.name ?? "";
   const logs = (db.prepare("SELECT * FROM work_logs ORDER BY date, created_at, id").all() as LogRow[]).map(toLog);
+  // 拼音搜索用：内容在前（高亮按第一段算），项目名在后
+  for (const l of logs) l.py = pinyinIndex(l.content, projectName(l.projectId));
   return {
-    projects: listWorkProjects(db),
+    projects,
     logs,
     settings: getWorkSettings(db),
     reports,

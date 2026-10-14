@@ -3,6 +3,8 @@
  * 这里只有纯函数，浏览器和服务端都能用。
  */
 
+import { pinyinMatch } from "./view";
+
 export type Period = "am" | "pm";
 
 export interface WorkProject {
@@ -31,6 +33,8 @@ export interface WorkLog {
   source: string;
   createdAt: string;
   updatedAt: string;
+  /** 内容和项目名的拼音（只在全部记录的接口里有，用来拼音搜索） */
+  py?: string;
 }
 
 export interface WorkSettings {
@@ -726,7 +730,7 @@ export function filterLogs(logs: WorkLog[], q: string, projectId: number | null 
   const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   return logs
     .filter((l) => projectId === "all" || l.projectId === projectId)
-    .filter((l) => words.every((w) => l.content.toLowerCase().includes(w)))
+    .filter((l) => words.every((w) => l.content.toLowerCase().includes(w) || pinyinMatch(w, l.py)))
     .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
 }
 

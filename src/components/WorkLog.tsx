@@ -18,6 +18,7 @@ import {
   Trash2,
 } from "lucide-react";
 import NextLink from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { api, readLocal, writeLocal } from "@/lib/client";
@@ -84,10 +85,20 @@ export function WorkView() {
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [remindOpen, setRemindOpen] = useState(false);
   const [dailyView, setDailyView] = useState<"day" | "list">("day");
+  // 从搜索结果跳过来：/work?date=2026-10-12 打开那一天的日报
+  const dateParam = useSearchParams().get("date");
+  useEffect(() => {
+    if (!dateParam || !/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) return;
+    setDate(dateParam);
+    setKind("daily");
+    setDailyView("day");
+  }, [dateParam]);
   const { data, mutate } = useWork(date);
   const today = localDate();
 
   useEffect(() => {
+    // 从搜索结果跳过来时直接打开那一天，不恢复上次的标签页
+    if (new URLSearchParams(window.location.search).get("date")) return;
     const saved = readLocal<Kind>("mydoc.workTab", "daily");
     if (saved === "weekly" || saved === "calendar") setKind(saved);
     if (readLocal<string>("mydoc.workDailyView", "day") === "list") setDailyView("list");

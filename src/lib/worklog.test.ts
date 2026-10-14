@@ -474,3 +474,20 @@ describe("JSON 备份里的工作记录", () => {
     expect(repo.importBackup(db, backupSchema.parse(old)).imported).toBe(0);
   });
 });
+
+describe("搜索工作记录", () => {
+  it("支持拼音首字母和全拼", () => {
+    const logs = [log({ content: "修复切片问题", py: "xiu fu qie pian wen ti" }), log({ content: "写接口" })];
+    expect(filterLogs(logs, "qp", "all").map((l) => l.content)).toEqual(["修复切片问题"]);
+    expect(filterLogs(logs, "qiepian", "all")).toHaveLength(1);
+    expect(filterLogs(logs, "接口", "all")).toHaveLength(1);
+  });
+
+  it("全部记录的接口带上拼音（包括项目名）", () => {
+    const db = openDb(":memory:");
+    const p = wr.createWorkProject(db, { name: "知识库", code: "", taskName: "", taskCode: "", archived: false });
+    wr.createWorkLogs(db, [{ date: "2026-10-12", period: "am", projectId: p.id, content: "写接口", hours: null, done: true }]);
+    const all = wr.getWorkAll(db);
+    expect(filterLogs(all.logs, "zsk", "all")).toHaveLength(1);
+  });
+});

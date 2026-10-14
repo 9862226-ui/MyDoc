@@ -1,20 +1,25 @@
 "use client";
 
-import { Quote, Search } from "lucide-react";
+import { NotebookPen, Quote, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { copyText, useAppData } from "@/lib/client";
 import { platformLabel } from "@/lib/platforms";
 import type { Link, Snippet } from "@/lib/types";
 import { pinyinHits, projectIndex, projectPathLabel, search, type ProjectInfo } from "@/lib/view";
+import { filterLogs, weekdayLabel, type WorkLog } from "@/lib/worklog";
 import { cx, DocIcon, Kbd, ProjectBadge, useModKey } from "./ui";
 import { useLinkActions, useUI } from "./ui-context";
+import { useWorkAll } from "./WorkCalendar";
 
 type Item =
   | { type: "link"; link: Link }
   | { type: "project"; info: ProjectInfo }
-  | { type: "snippet"; snippet: Snippet };
-type Scope = "all" | "links" | "projects" | "snippets";
+  | { type: "snippet"; snippet: Snippet }
+  | { type: "work"; log: WorkLog };
+type Scope = "all" | "links" | "projects" | "snippets" | "work";
+
+const WORK_LIMIT = 8;
 
 /** 摘录在列表里只显示第一行 */
 const firstLine = (text: string) => text.trim().split(/\n/)[0].slice(0, 120);
@@ -99,6 +104,10 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
   }, [data]);
 
   const result = useMemo(() => (data && query.trim() ? search(data, query) : null), [data, query]);
+  // 工作记录不在 AppData 里，单独取（打开搜索时才请求）
+  const { data: work } = useWorkAll();
+  const workHits = useMemo(() => (work && query.trim() ? filterLogs(work.logs, query, "all") : []), [work, query]);
+  const workProject = (id: number | null) => work?.projects.find((p) => p.id === id)?.name;
 
   const sections = useMemo(() => {
     if (!data) return [];
@@ -133,8 +142,15 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
             ? result.snippets.map((snippet): Item => ({ type: "snippet", snippet }))
             : [],
       },
+      {
+        title: "工作记录",
+        items:
+          scope === "all" || scope === "work"
+            ? workHits.slice(0, scope === "work" ? 50 : WORK_LIMIT).map((log): Item => ({ type: "work", log }))
+            : [],
+      },
     ].filter((s) => s.items.length);
-  }, [data, result, scope]);
+  }, [data, result, scope, workHits]);
 
   const flat = sections.flatMap((s) => s.items);
   const current = Math.min(active, flat.length - 1);
@@ -146,6 +162,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
   const choose = (item: Item, copy = false) => {
     onClose();
     if (item.type === "project") router.push(`/p/${item.info.project.id}`);
+    else if (item.type === "work") router.push(`/work?date=${item.log.date}`);
     else if (item.type === "snippet")
       void copyText(item.snippet.content).then((ok) =>
         ui.toast(ok ? "已复制摘录" : "复制失败", { kind: ok ? "ok" : "error" }),
@@ -156,10 +173,11 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
 
   const scopes: [Scope, string][] = result
     ? [
-        ["all", `全部 ${result.links.length + result.projects.length + result.snippets.length}`],
+        ["all", `全部 ${result.links.length + result.projects.length + result.snippets.length + workHits.length}`],
         ["links", `链接 ${result.links.length}`],
         ["projects", `项目 ${result.projects.length}`],
         ...(result.snippets.length ? [["snippets", `摘录 ${result.snippets.length}`] as [Scope, string]] : []),
+        ...(workHits.length ? [["work", `工作记录 ${workHits.length}`] as [Scope, string]] : []),
       ]
     : [];
 
@@ -251,7 +269,9 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
                         ? `l${item.link.id}`
                         : item.type === "snippet"
                           ? `s${item.snippet.id}`
-                          : `p${item.info.project.id}`
+                          : item.type === "work"
+                            ? `w${item.log.id}`
+                            : `p${item.info.project.id}`
                     }
                     type="button"
                     data-index={idx}
@@ -281,6 +301,28 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
                             {item.link.accessCode}
                           </span>
                         )}
+                      </>
+                    ) : item.type === "work" ? (
+                      <>
+                        <span
+                          aria-hidden
+                          className="flex size-8 shrink-0 items-center justify-center rounded-md bg-[#13A3A3] text-white"
+                        >
+                          <NotebookPen size={16} />
+                        </span>
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="truncate">{highlight(item.log.content, query, item.log.py)}</span>
+                          <span className="truncate text-xs leading-5 text-faint">
+                            {[
+                              "工作记录",
+                              `${Number(item.log.date.slice(5, 7))}月${Number(item.log.date.slice(8))}日 ${weekdayLabel(item.log.date)}`,
+                              workProject(item.log.projectId),
+                              !item.log.done && "未完成",
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </span>
+                        </span>
                       </>
                     ) : item.type === "snippet" ? (
                       <>
