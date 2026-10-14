@@ -32,7 +32,7 @@ import {
   Textarea,
 } from "./ui";
 import { DueHeader } from "./DueHeader";
-import { useUI } from "./ui-context";
+import { useUI, type ReminderInit } from "./ui-context";
 
 const REPEATS: RepeatKind[] = ["none", "monthly", "yearly"];
 
@@ -47,7 +47,7 @@ export function ReminderDialog({
   open: boolean;
   onClose: () => void;
   reminder?: Reminder;
-  init?: { title?: string; note?: string };
+  init?: ReminderInit;
 }) {
   return (
     <Dialog
@@ -62,20 +62,13 @@ export function ReminderDialog({
   );
 }
 
-function ReminderForm({
-  reminder,
-  init,
-  onDone,
-}: {
-  reminder?: Reminder;
-  init?: { title?: string; note?: string };
-  onDone: () => void;
-}) {
+function ReminderForm({ reminder, init, onDone }: { reminder?: Reminder; init?: ReminderInit; onDone: () => void }) {
   const ui = useUI();
   const [title, setTitle] = useState(reminder?.title ?? init?.title ?? "");
-  const [dueDate, setDueDate] = useState(reminder?.dueDate ?? "");
-  const [repeat, setRepeat] = useState<RepeatKind>(reminder?.repeat ?? "yearly");
-  const [remindDays, setRemindDays] = useState(reminder?.remindDays ?? 7);
+  const [dueDate, setDueDate] = useState(reminder?.dueDate ?? init?.dueDate ?? "");
+  // 会议待办这类一次性的事：不重复，提前 1 天提醒
+  const [repeat, setRepeat] = useState<RepeatKind>(reminder?.repeat ?? (init?.once ? "none" : "yearly"));
+  const [remindDays, setRemindDays] = useState(reminder?.remindDays ?? (init?.once ? 1 : 7));
   const [url, setUrl] = useState(reminder?.url ?? "");
   const [note, setNote] = useState(reminder?.note ?? init?.note ?? "");
   const [busy, setBusy] = useState(false);

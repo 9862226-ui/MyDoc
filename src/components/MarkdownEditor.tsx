@@ -469,7 +469,7 @@ export function MarkdownEditor({
           </div>
         )}
         {markdown && !preview && !bare && (
-          <div className="flex items-center gap-3 px-2.5 pb-1.5 text-[11px] text-faint max-sm:hidden">
+          <div className="flex flex-wrap items-center gap-x-3 px-2.5 pb-1.5 text-[11px] whitespace-nowrap text-faint max-sm:hidden">
             <span>支持 Markdown</span>
             <span>回车自动接着写列表</span>
             <span>Tab 缩进</span>

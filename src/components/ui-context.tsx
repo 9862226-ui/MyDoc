@@ -27,6 +27,14 @@ export interface ToastOptions {
   action?: { label: string; onClick: () => void };
 }
 
+/** 新建提醒时预填的内容（例如会议待办：标题、截止日期、只提醒一次） */
+export interface ReminderInit {
+  title?: string;
+  note?: string;
+  dueDate?: string;
+  once?: boolean;
+}
+
 export interface UI {
   addLink(init?: LinkInit): void;
   editLink(link: Link): void;
@@ -36,7 +44,7 @@ export interface UI {
   editProject(project?: Project, groupId?: number): void;
   addTagsTo(ids: number[], done?: () => void): void;
   /** 添加或编辑提醒；init 是新建时预先填好的内容（例如从会议待办创建） */
-  editReminder(reminder?: Reminder, init?: { title?: string; note?: string }): void;
+  editReminder(reminder?: Reminder, init?: ReminderInit): void;
   /** 添加或编辑摘录 */
   editSnippet(snippet?: Snippet, init?: { content?: string; sourceUrl?: string; sourceTitle?: string }): void;
   /** 把项目分享成只读链接 */

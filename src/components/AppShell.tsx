@@ -19,7 +19,14 @@ import { SnippetDialog, type SnippetInit } from "./Snippets";
 import { Sidebar } from "./Sidebar";
 import { MobileHeader, TabBar, TopBar } from "./Topbar";
 import { ToastCard } from "./ui";
-import { UIContext, type ConfirmOptions, type LinkInit, type ToastOptions, type UI } from "./ui-context";
+import {
+  UIContext,
+  type ConfirmOptions,
+  type LinkInit,
+  type ReminderInit,
+  type ToastOptions,
+  type UI,
+} from "./ui-context";
 
 interface Toast extends ToastOptions {
   id: number;
@@ -47,11 +54,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [projectDialog, setProjectDialog] = useState<{ open: boolean; project?: Project; groupId?: number }>({
     open: false,
   });
-  const [reminderDialog, setReminderDialog] = useState<{
-    open: boolean;
-    reminder?: Reminder;
-    init?: { title?: string; note?: string };
-  }>({ open: false });
+  const [reminderDialog, setReminderDialog] = useState<{ open: boolean; reminder?: Reminder; init?: ReminderInit }>({
+    open: false,
+  });
   const [shareTarget, setShareTarget] = useState<Project | null>(null);
   const [snippetDialog, setSnippetDialog] = useState<{ open: boolean; snippet?: Snippet; init?: SnippetInit }>({
     open: false,

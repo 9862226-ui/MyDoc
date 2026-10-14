@@ -485,6 +485,19 @@ const meetingFields = {
   notes: z.string().max(50_000, "纪要太长了（最多 5 万字）"),
 };
 
+/** 自己存的纪要模板 */
+export const meetingTemplatesSchema = z.object({
+  templates: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(40),
+        name: z.string().trim().min(1, "模板名称不能为空").max(20, "模板名称最多 20 个字"),
+        notes: z.string().max(5000),
+      }),
+    )
+    .max(20, "最多存 20 个模板"),
+});
+
 export const meetingCreateSchema = z.object({
   title: meetingFields.title,
   date: meetingFields.date,

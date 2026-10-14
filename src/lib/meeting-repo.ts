@@ -1,6 +1,7 @@
 import type { DB } from "./db";
 import { HttpError } from "./errors";
-import type { Meeting } from "./meetings";
+import type { Meeting, MeetingTemplate } from "./meetings";
+import { getSetting, setSetting } from "./settings";
 
 const now = () => new Date().toISOString();
 
@@ -79,4 +80,19 @@ export function deleteMeeting(db: DB, id: number): Meeting {
   const m = getMeeting(db, id);
   db.prepare("DELETE FROM meetings WHERE id = ?").run(id);
   return m;
+}
+
+/* ---------- 自己存的纪要模板 ---------- */
+
+const TEMPLATES_KEY = "meetingTemplates";
+
+export const listMeetingTemplates = (db: DB): MeetingTemplate[] =>
+  getSetting(db, TEMPLATES_KEY, { templates: [] as MeetingTemplate[] }).templates.map((t) => ({ ...t, custom: true }));
+
+export function setMeetingTemplates(
+  db: DB,
+  templates: { id: string; name: string; notes: string }[],
+): MeetingTemplate[] {
+  setSetting(db, TEMPLATES_KEY, { templates: templates.map(({ id, name, notes }) => ({ id, name, notes })) });
+  return listMeetingTemplates(db);
 }
