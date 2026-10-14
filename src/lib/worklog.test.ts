@@ -4,7 +4,10 @@ import {
   buildDaily,
   buildWeekly,
   dayStats,
+  dayStatus,
   DEFAULT_WORK_SETTINGS,
+  listDays,
+  weekStatus,
   filterLogs,
   isMissed,
   isoWeek,
@@ -194,13 +197,22 @@ describe("周报", () => {
     expect(r.items).toHaveLength(4);
     const fewer = buildWeekly(withDraft(logs.slice(1), d), "2026-10-05");
     expect(fewer.items.map((i) => i.text)).not.toContain("升级代码");
+    // 合并过的条目是自己写的字，来源没了也保留
+    const merged = draftOps.merge(d, [d.items[0].id, d.items[1].id], "完成升级与测试");
+    const kept = buildWeekly(withDraft(logs.slice(2), merged), "2026-10-05");
+    expect(kept.items.map((i) => i.text)).toContain("完成升级与测试");
   });
 
   it("上周计划逐条打勾：打勾的写进本周总结，没做完的建议放进下周计划", () => {
-    const lastWeek = { items: [], excluded: [], doneLastPlan: [], plan: [
-      { id: "a", text: "继续改名报错" },
-      { id: "b", text: "整理上线文档" },
-    ] };
+    const lastWeek = {
+      items: [],
+      excluded: [],
+      doneLastPlan: [],
+      plan: [
+        { id: "a", text: "继续改名报错" },
+        { id: "b", text: "整理上线文档" },
+      ],
+    };
     const logs = [log({ date: "2026-10-12", content: "写接口" })];
     const reports = { "weekly:2026-10-05": { draft: lastWeek } };
     let r = buildWeekly(data(logs, reports), "2026-10-12");
@@ -373,5 +385,57 @@ describe("日历和周报列表", () => {
     const csv = logsCsv(logs, data([]).projects);
     expect(csv.split("\r\n")[0]).toBe("日期,周几,时段,项目,工作内容,工时,状态");
     expect(csv).toContain('2026-10-13,周二,上午,数据平台,"写接口, 联调",,已完成');
+  });
+});
+
+describe("提交状态、日报列表、日报同步到周报", () => {
+  it("日报状态：已提交 / 未提交 / 漏记；列表只列到今天", () => {
+    const d = data([log({ date: "2026-10-12", content: "a" }), log({ date: "2026-10-13", content: "b" })], {
+      "daily:2026-10-12": { submittedAt: "2026-10-12T10:00:00Z" },
+    });
+    expect(dayStatus(d, "2026-10-12", "2026-10-15")).toBe("submitted");
+    expect(dayStatus(d, "2026-10-13", "2026-10-15")).toBe("unsubmitted");
+    expect(dayStatus(d, "2026-10-14", "2026-10-15")).toBe("missed");
+    expect(dayStatus(d, "2026-10-15", "2026-10-15")).toBeNull(); // 今天还没记，不算漏记
+    expect(dayStatus(d, "2026-10-11", "2026-10-15")).toBeNull(); // 周日
+    expect(listDays(d, "2026-10", "2026-10-15").slice(0, 3)).toEqual(["2026-10-14", "2026-10-13", "2026-10-12"]);
+  });
+
+  it("日报里改过的总结同步到周报的候选和明细", () => {
+    const logs = [
+      log({ date: "2026-10-12", content: "改代码" }),
+      log({ date: "2026-10-12", content: "测试", period: "pm" }),
+      log({ date: "2026-10-13", content: "写文档" }),
+    ];
+    const d = data(logs, {
+      "daily:2026-10-12": { amSummary: "1. 完成代码升级并测试", pmSummary: "1. 完成代码升级并测试" },
+    });
+    expect(buildDaily(d, "2026-10-12").edited).toBe(true);
+    const r = buildWeekly(d, "2026-10-12");
+    expect(r.candidates.map((c) => c.text)).toEqual(["完成代码升级并测试", "写文档"]);
+    expect(r.days[0].content).toBe("完成代码升级并测试");
+    expect(r.days[1].content).toBe("写文档");
+    expect(weekStatus(r)).toBe("uncurated");
+  });
+});
+
+describe("下班提醒和提交状态", () => {
+  it("今天的日报已提交就不提醒；周报提醒带上没提交的日报天数", async () => {
+    const db = openDb(":memory:");
+    const sent: { title: string; text: string }[] = [];
+    const send = async (_c: unknown, m: { title: string; text: string }) => void sent.push(m);
+    setNotifyConfig(db, { ...DEFAULT_NOTIFY, target: "https://example.test/hook" });
+    wr.setWorkSettings(db, { ...DEFAULT_WORK_SETTINGS, remindDaily: true, remindWeekly: true });
+    wr.createWorkLogs(db, [
+      { date: "2026-10-12", period: "am", projectId: null, content: "一", hours: null, done: true },
+      { date: "2026-10-16", period: "am", projectId: null, content: "二", hours: null, done: true },
+    ]);
+    wr.setReportFields(db, "daily", "2026-10-16", { submittedAt: "2026-10-16T09:00:00Z" });
+    // 周五 17:31（上海时间）
+    const at = new Date(Date.UTC(2026, 9, 16, 9, 31));
+    expect(await runWorkRemind(db, at, send)).toEqual(["weekly:sent"]);
+    expect(sent[0].text).toContain("本周还有 1 天日报没提交、3 天没有记录");
+    wr.setReportFields(db, "weekly", "2026-10-12", { submittedAt: "2026-10-16T09:00:00Z" });
+    expect(await runWorkRemind(db, new Date(Date.UTC(2026, 9, 16, 9, 40)), send)).toEqual([]);
   });
 });

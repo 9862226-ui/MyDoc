@@ -7,6 +7,9 @@ import {
   CircleCheck,
   Copy,
   Bell,
+  CalendarDays,
+  List,
+  Pencil,
   FolderCog,
   NotebookPen,
   Plus,
@@ -16,7 +19,7 @@ import {
 } from "lucide-react";
 import NextLink from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import useSWR, { mutate as revalidate } from "swr";
+import useSWR from "swr";
 import { api, readLocal, writeLocal } from "@/lib/client";
 import { localDate } from "@/lib/format";
 import {
@@ -36,9 +39,10 @@ import {
   type WorkProject,
 } from "@/lib/worklog";
 import { LastResult } from "./settings-ui";
-import { CopyCell, ReportCard, useCopy } from "./work-ui";
+import { CopyCell, refreshWork, ReportCard, StatusBadge, SubmitButton, useCopy, useSubmit } from "./work-ui";
 import { WeeklyEditor } from "./WeeklyEditor";
 import { WorkCalendar } from "./WorkCalendar";
+import { WorkDailyList } from "./WorkDailyList";
 import { WorkHistory } from "./WorkHistory";
 import {
   Banner,
@@ -49,6 +53,7 @@ import {
   Field,
   IconButton,
   Input,
+  Segmented,
   Select,
   Skeleton,
   Spinner,
@@ -58,9 +63,6 @@ import {
 import { useUI } from "./ui-context";
 
 type Kind = "daily" | "weekly" | "calendar";
-
-/** 改了数据后，日报、周报、日历都要刷新 */
-export const refreshWork = () => revalidate((k) => typeof k === "string" && k.startsWith("/api/work"));
 
 const workKey = (date: string) => `/api/work?date=${weekStart(date)}`;
 
@@ -81,12 +83,14 @@ export function WorkView() {
   const [date, setDate] = useState(() => localDate());
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [remindOpen, setRemindOpen] = useState(false);
+  const [dailyView, setDailyView] = useState<"day" | "list">("day");
   const { data, mutate } = useWork(date);
   const today = localDate();
 
   useEffect(() => {
     const saved = readLocal<Kind>("mydoc.workTab", "daily");
     if (saved === "weekly" || saved === "calendar") setKind(saved);
+    if (readLocal<string>("mydoc.workDailyView", "day") === "list") setDailyView("list");
   }, []);
 
   const run = async (fn: () => Promise<unknown>) => {
@@ -101,6 +105,7 @@ export function WorkView() {
   const openDay = (d: string) => {
     setDate(d);
     setKind("daily");
+    setDailyView("day");
     window.scrollTo({ top: 0 });
   };
 
@@ -158,7 +163,22 @@ export function WorkView() {
             { value: "calendar", label: "日历" },
           ]}
         />
-        {kind !== "calendar" && (
+        {kind === "daily" && (
+          <Segmented
+            label="日报显示方式"
+            value={dailyView}
+            onChange={(v) => {
+              setDailyView(v);
+              writeLocal("mydoc.workDailyView", v);
+            }}
+            options={[
+              { value: "day", label: "单日", icon: <CalendarDays size={15} /> },
+              { value: "list", label: "列表", icon: <List size={15} /> },
+            ]}
+            className="mb-1.5 md:mr-auto md:ml-2"
+          />
+        )}
+        {kind !== "calendar" && !(kind === "daily" && dailyView === "list") && (
           <div className="flex items-center gap-1 pb-1.5 max-md:w-full max-md:justify-between">
             <IconButton label={kind === "daily" ? "前一天" : "上一周"} onClick={() => setDate(shiftDate(date, -step))}>
               <ChevronLeft size={18} />
@@ -180,7 +200,9 @@ export function WorkView() {
         )}
       </div>
 
-      {kind === "calendar" ? (
+      {kind === "daily" && dailyView === "list" ? (
+        <WorkDailyList today={today} onOpenDay={openDay} />
+      ) : kind === "calendar" ? (
         <WorkCalendar
           today={today}
           onOpenDay={openDay}
@@ -419,7 +441,7 @@ function LogList({
               <LogRow
                 key={l.id}
                 log={l}
-                project={data.projects.find((p) => p.id === l.projectId)}
+                projects={data.projects}
                 showPeriod={kind === "weekly"}
                 onPatch={(patch) => run(() => api(`/api/work/logs/${l.id}`, { method: "PATCH", body: patch }))}
                 onDelete={() => void remove(l)}
@@ -434,17 +456,19 @@ function LogList({
 
 function LogRow({
   log,
-  project,
+  projects,
   showPeriod,
   onPatch,
   onDelete,
 }: {
   log: WorkLog;
-  project?: WorkProject;
+  projects: WorkProject[];
   showPeriod: boolean;
   onPatch: (patch: Partial<WorkLog>) => Promise<void>;
   onDelete: () => void;
 }) {
+  const project = projects.find((p) => p.id === log.projectId);
+  const [dialog, setDialog] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(log.content);
   const save = () => {
@@ -492,22 +516,169 @@ function LogRow({
           </button>
         )}
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-faint">
-          <span className="truncate">{project?.name ?? "未选择项目"}</span>
+          <button
+            type="button"
+            onClick={() => setDialog(true)}
+            title="修改项目、时段、工时"
+            className="cursor-pointer truncate hover:text-fg hover:underline"
+          >
+            {project?.name ?? "未选择项目"}
+          </button>
           {showPeriod && <span>{log.period === "am" ? "上午" : "下午"}</span>}
           {log.hours !== null && <span>{log.hours} 小时</span>}
           {!log.done && <span className="text-warn-text">未完成</span>}
           {log.source === "mcp" && <span>AI 助手记录</span>}
         </div>
       </div>
-      <IconButton
-        label="删除"
-        size="sm"
-        onClick={onDelete}
-        className="shrink-0 opacity-0 group-hover/log:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
-      >
-        <Trash2 size={15} />
-      </IconButton>
+      <div className="flex shrink-0 opacity-0 group-hover/log:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
+        <IconButton label="修改" size="sm" onClick={() => setDialog(true)}>
+          <Pencil size={15} />
+        </IconButton>
+        <IconButton label="删除" size="sm" onClick={onDelete}>
+          <Trash2 size={15} />
+        </IconButton>
+      </div>
+      <LogEditDialog
+        open={dialog}
+        log={log}
+        projects={projects}
+        onClose={() => setDialog(false)}
+        onSave={async (patch) => {
+          setDialog(false);
+          if (Object.keys(patch).length) await onPatch(patch);
+        }}
+      />
     </li>
+  );
+}
+
+/** 修改一条记录：内容、项目、日期、上午下午、工时、是否完成 */
+function LogEditDialog({
+  open,
+  log,
+  projects,
+  onClose,
+  onSave,
+}: {
+  open: boolean;
+  log: WorkLog;
+  projects: WorkProject[];
+  onClose: () => void;
+  onSave: (patch: Partial<WorkLog>) => Promise<void>;
+}) {
+  const [v, setV] = useState(log);
+  const [hours, setHours] = useState("");
+  // 只在打开时读入；打开期间数据刷新也不覆盖正在改的内容
+  useEffect(() => {
+    if (!open) return;
+    setV(log);
+    setHours(log.hours === null ? "" : String(log.hours));
+  }, [open]);
+  // 停用的项目不再出现在选项里，除非这条记录本来就属于它
+  const options = projects.filter((p) => !p.archived || p.id === log.projectId);
+  const h = hours.trim() === "" ? null : Number(hours);
+  const valid = v.content.trim() && (h === null || (h >= 0 && h <= 24));
+
+  const save = () => {
+    if (!valid) return;
+    const next: Partial<WorkLog> = {};
+    const content = v.content.trim();
+    if (content !== log.content) next.content = content;
+    if (v.projectId !== log.projectId) next.projectId = v.projectId;
+    if (v.date !== log.date) next.date = v.date;
+    if (v.period !== log.period) next.period = v.period;
+    if (h !== log.hours) next.hours = h;
+    if (v.done !== log.done) next.done = v.done;
+    void onSave(next);
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      size="sm"
+      title="修改记录"
+      footer={
+        <>
+          <Button onClick={onClose}>取消</Button>
+          <Button variant="primary" disabled={!valid} onClick={save}>
+            保存
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <Field label="工作内容">
+          <Textarea
+            rows={3}
+            value={v.content}
+            onChange={(e) => setV({ ...v, content: e.target.value })}
+            className="leading-6"
+          />
+        </Field>
+        <Field label="报工项目">
+          <Select
+            value={v.projectId ?? ""}
+            onChange={(e) => setV({ ...v, projectId: e.target.value ? Number(e.target.value) : null })}
+          >
+            {options.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+                {p.archived ? "（已停用）" : ""}
+              </option>
+            ))}
+            <option value="">未选择项目</option>
+          </Select>
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="日期">
+            <Input
+              type="date"
+              value={v.date}
+              onChange={(e) => e.target.value && setV({ ...v, date: e.target.value })}
+            />
+          </Field>
+          <Field label="时段" as="div">
+            <div role="radiogroup" aria-label="时段" className="flex h-9 rounded-md bg-field p-0.5">
+              {PERIODS.map((p) => (
+                <button
+                  key={p.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={v.period === p.value}
+                  onClick={() => setV({ ...v, period: p.value })}
+                  className={cx(
+                    "flex-1 cursor-pointer rounded text-[13px] transition-colors",
+                    v.period === p.value
+                      ? "bg-surface font-medium text-fg shadow-[0_1px_2px_var(--shadow)] dark:bg-chip"
+                      : "text-muted hover:text-fg",
+                  )}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </Field>
+        </div>
+        <Field label="工时（小时）" hint="不填时按每天的正常工时平均分">
+          <Input
+            type="number"
+            min={0}
+            max={24}
+            step={0.5}
+            value={hours}
+            placeholder="自动"
+            onChange={(e) => setHours(e.target.value)}
+            className="w-32"
+          />
+        </Field>
+        <label className="flex cursor-pointer items-center gap-2">
+          <Checkbox checked={v.done} onChange={(e) => setV({ ...v, done: e.target.checked })} />
+          已完成
+          <span className="text-xs text-faint">没完成的会放进下周计划的建议里</span>
+        </label>
+      </div>
+    </Dialog>
   );
 }
 
@@ -597,6 +768,7 @@ function DailyCard({
 }) {
   const copy = useCopy();
   const ai = useAiPolish("daily", date, run);
+  const submit = useSubmit();
   return (
     <ReportCard
       title="工作日报"
@@ -611,6 +783,12 @@ function DailyCard({
             <Copy size={14} />
             复制全文
           </Button>
+          <SubmitButton
+            submitted={!!r.submittedAt}
+            busy={submit.busy}
+            disabled={!r.logCount}
+            onToggle={(on) => void submit.set("daily", date, on, "日报")}
+          />
         </>
       }
     >

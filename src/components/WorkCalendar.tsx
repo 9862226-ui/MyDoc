@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, CircleCheck } from "lucide-react";
 import { useMemo, useState } from "react";
 import useSWR from "swr";
 import { api } from "@/lib/client";
@@ -11,6 +11,7 @@ import {
   isoWeek,
   monthGrid,
   projectTotals,
+  reportKey,
   shiftDate,
   shiftMonth,
   weekdayLabel,
@@ -108,6 +109,7 @@ export function WorkCalendar({
               const st = stats.get(d);
               const other = !d.startsWith(month);
               const miss = !other && isMissed(d, today, stats, data.settings.remindDays);
+              const submitted = !!data.reports[reportKey("daily", d)]?.submittedAt;
               const weekNo =
                 i % 7 === 0 ? (
                   <button
@@ -146,15 +148,24 @@ export function WorkCalendar({
                   {st ? (
                     <span className="text-[11px] leading-4 text-fg/80 md:text-xs">
                       {st.count} 条<span className="max-md:hidden"> · {round(st.hours)}h</span>
+                      {!submitted && d <= today && <span className="block text-warn-text max-md:hidden">未提交</span>}
                     </span>
                   ) : (
                     miss && <span className="text-[11px] leading-4 text-warn-text max-md:hidden">未记录</span>
                   )}
-                  {!!st?.undone && (
-                    <span
-                      title={`${st.undone} 条未完成`}
-                      className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-warn md:top-2 md:right-2"
+                  {submitted ? (
+                    <CircleCheck
+                      size={14}
+                      aria-label="日报已提交"
+                      className="absolute top-1.5 right-1.5 text-success md:top-2 md:right-2"
                     />
+                  ) : (
+                    !!st?.undone && (
+                      <span
+                        title={`${st.undone} 条未完成`}
+                        className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-warn md:top-2 md:right-2"
+                      />
+                    )
                   )}
                 </button>,
               ];
@@ -176,6 +187,10 @@ export function WorkCalendar({
             <span className="flex items-center gap-1">
               <span className="size-1.5 rounded-full bg-warn" />
               有未完成的事
+            </span>
+            <span className="flex items-center gap-1">
+              <CircleCheck size={12} className="text-success" />
+              日报已提交
             </span>
             <span className="max-md:hidden">点日期看日报，点左边的周次看周报</span>
           </div>

@@ -1,9 +1,11 @@
 "use client";
 
-import { Copy } from "lucide-react";
-import type { ReactNode } from "react";
-import { copyText } from "@/lib/client";
-import { cx } from "./ui";
+import { CircleCheck, Copy } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { mutate as revalidate } from "swr";
+import { api, copyText } from "@/lib/client";
+import type { DayStatus, WeekStatus } from "@/lib/worklog";
+import { Button, cx } from "./ui";
 import { useUI } from "./ui-context";
 
 /** 工作记录里日报、周报共用的小组件 */
@@ -79,5 +81,87 @@ export function ReportCard({
       </div>
       {children}
     </section>
+  );
+}
+
+/** 改了数据后，日报、周报、日历、列表都要刷新 */
+export const refreshWork = () => revalidate((k) => typeof k === "string" && k.startsWith("/api/work"));
+
+/** 标记 / 取消「已提交到公司系统」 */
+export function useSubmit() {
+  const ui = useUI();
+  const [busy, setBusy] = useState(false);
+  const set = async (kind: "daily" | "weekly", key: string, on: boolean, label: string) => {
+    setBusy(true);
+    try {
+      await api("/api/work/reports", {
+        method: "PUT",
+        body: { kind, key, fields: { submittedAt: on ? new Date().toISOString() : null } },
+      });
+      await refreshWork();
+      if (on) {
+        ui.toast(`${label}已标记为已提交`, {
+          action: { label: "撤销", onClick: () => void set(kind, key, false, label) },
+        });
+      }
+    } catch (e) {
+      ui.toast((e as Error).message, { kind: "error" });
+    }
+    setBusy(false);
+  };
+  return { busy, set };
+}
+
+/** 卡片标题右边的「标记已提交」按钮；已提交时显示绿色，点一下取消 */
+export function SubmitButton({
+  submitted,
+  busy,
+  disabled,
+  onToggle,
+}: {
+  submitted: boolean;
+  busy: boolean;
+  disabled?: boolean;
+  onToggle: (on: boolean) => void;
+}) {
+  return submitted ? (
+    <Button
+      size="sm"
+      loading={busy}
+      title="点一下取消已提交"
+      onClick={() => onToggle(false)}
+      className="border-success/40 text-success-text hover:bg-success-soft"
+    >
+      {!busy && <CircleCheck size={14} />}
+      已提交
+    </Button>
+  ) : (
+    <Button size="sm" variant="primary" loading={busy} disabled={disabled} onClick={() => onToggle(true)}>
+      {!busy && <CircleCheck size={14} />}
+      标记已提交
+    </Button>
+  );
+}
+
+const STATUS: Record<DayStatus | WeekStatus, { label: string; className: string }> = {
+  submitted: { label: "已提交", className: "bg-success-soft text-success-text" },
+  unsubmitted: { label: "未提交", className: "bg-warn-soft text-warn-text" },
+  missed: { label: "漏记", className: "border border-dashed border-warn/70 text-warn-text" },
+  curated: { label: "已整理", className: "bg-accent-soft text-accent-text" },
+  uncurated: { label: "未整理", className: "bg-warn-soft text-warn-text" },
+  empty: { label: "没有记录", className: "bg-chip text-faint" },
+};
+
+export function StatusBadge({ status }: { status: DayStatus | WeekStatus }) {
+  const s = STATUS[status];
+  return (
+    <span
+      className={cx(
+        "inline-flex shrink-0 items-center rounded px-1.5 text-xs leading-5 whitespace-nowrap",
+        s.className,
+      )}
+    >
+      {s.label}
+    </span>
   );
 }

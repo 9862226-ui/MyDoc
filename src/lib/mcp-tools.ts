@@ -608,8 +608,8 @@ export const TOOLS: Tool[] = [
       const day = a.date ?? zonedNow(getNotifyConfig(db).timeZone).date;
       const data = wr.getWorkWeek(db, day);
       if (a.kind === "daily") {
-        const { autoAmSummary: _a, autoPmSummary: _b, ...r } = buildDaily(data, day);
-        return r;
+        const { autoAmSummary: _a, autoPmSummary: _b, edited: _c, submittedAt, ...r } = buildDaily(data, day);
+        return { ...r, submitted: !!submittedAt };
       }
       const r = buildWeekly(data, day);
       return {
@@ -621,6 +621,7 @@ export const TOOLS: Tool[] = [
         days: r.days,
         summary: r.summaryText,
         plan: r.planText,
+        submitted: !!r.submittedAt,
       };
     },
   }),

@@ -325,7 +325,12 @@ const weeklyDraft = z.object({
 export const workReportSchema = z.object({
   kind: z.enum(["daily", "weekly"]),
   key: workDate,
-  fields: z.object({ amSummary: reportText, pmSummary: reportText, draft: weeklyDraft.nullable().optional() }),
+  fields: z.object({
+    amSummary: reportText,
+    pmSummary: reportText,
+    draft: weeklyDraft.nullable().optional(),
+    submittedAt: z.string().max(40).nullable().optional(),
+  }),
 });
 
 const clock = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "时间格式不正确");

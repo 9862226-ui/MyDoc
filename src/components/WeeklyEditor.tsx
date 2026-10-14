@@ -20,7 +20,7 @@ import {
 } from "@/lib/worklog";
 import { Button, Checkbox, cx, Dialog, IconButton, Input, Textarea } from "./ui";
 import { useUI } from "./ui-context";
-import { CopyCell, ReportCard, useCopy } from "./work-ui";
+import { CopyCell, ReportCard, SubmitButton, useCopy, useSubmit } from "./work-ui";
 
 /**
  * 周报：人工整理本周总结（勾选候选、合并、调顺序、改字），编辑下周计划，
@@ -29,6 +29,7 @@ import { CopyCell, ReportCard, useCopy } from "./work-ui";
 export function WeeklyEditor({ data, date, onSaved }: { data: WorkData; date: string; onSaved: () => void }) {
   const ui = useUI();
   const copy = useCopy();
+  const submit = useSubmit();
   const start = weekStart(date);
   const key = reportKey("weekly", start);
   // 本地先改，界面立刻变化；保存按顺序排队
@@ -73,10 +74,18 @@ export function WeeklyEditor({ data, date, onSaved }: { data: WorkData; date: st
       title="员工周报"
       subtitle={r.logCount ? `${r.logCount} 条记录 · 整理好后点「复制」粘贴到公司系统` : "这一周还没有记录"}
       actions={
-        <Button size="sm" onClick={() => void copy("整张周报", weeklyText(r))} disabled={!r.logCount}>
-          <Copy size={14} />
-          复制全文
-        </Button>
+        <>
+          <Button size="sm" onClick={() => void copy("整张周报", weeklyText(r))} disabled={!r.logCount}>
+            <Copy size={14} />
+            复制全文
+          </Button>
+          <SubmitButton
+            submitted={!!r.submittedAt}
+            busy={submit.busy}
+            disabled={!r.logCount}
+            onToggle={(on) => void submit.set("weekly", start, on, "周报")}
+          />
+        </>
       }
     >
       <div className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-lg bg-field px-4 py-3 sm:grid-cols-4">

@@ -1,6 +1,6 @@
 "use client";
 
-import { Download } from "lucide-react";
+import { CircleCheck, Copy, Download, Undo2 } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import {
   buildWeekly,
@@ -12,10 +12,13 @@ import {
   weekdayLabel,
   weeksWithLogs,
   weekStart,
+  weekStatus,
+  weeklyText,
   type WorkLog,
 } from "@/lib/worklog";
 import { heatClass, useWorkAll } from "./WorkCalendar";
-import { Button, cx, SearchField, Select, Skeleton } from "./ui";
+import { Button, cx, IconButton, SearchField, Select, Skeleton } from "./ui";
+import { StatusBadge, useCopy, useSubmit } from "./work-ui";
 
 const md = (date: string) => `${Number(date.slice(5, 7))}月${Number(date.slice(8))}日`;
 const PAGE = 12;
@@ -62,6 +65,9 @@ export function WorkHistory({
   const { data } = useWorkAll();
   const [q, setQ] = useState("");
   const [project, setProject] = useState<string>("all");
+  const [status, setStatus] = useState<"all" | "unsubmitted" | "submitted">("all");
+  const copy = useCopy();
+  const submit = useSubmit();
   const [limit, setLimit] = useState(PAGE);
   const stats = useMemo(() => (data ? dayStats(data) : null), [data]);
   const projectId = project === "all" ? "all" : project === "none" ? null : Number(project);
@@ -75,7 +81,12 @@ export function WorkHistory({
 
   // 本周没有记录也放在最上面
   const weeks = [...new Set([weekStart(today), ...weeksWithLogs(data.logs)])].sort().reverse();
-  const shown = weeks.slice(0, limit);
+  const visible = weeks.filter((w) => {
+    if (status === "all") return true;
+    const r = buildWeekly(data, w);
+    return status === "submitted" ? !!r.submittedAt : r.logCount > 0 && !r.submittedAt;
+  });
+  const shown = visible.slice(0, limit);
 
   const exportCsv = () => {
     const logs = filtering ? found : data.logs;
@@ -106,6 +117,16 @@ export function WorkHistory({
           ))}
           <option value="none">未选择项目</option>
         </Select>
+        <Select
+          aria-label="按提交状态筛选"
+          value={status}
+          onChange={(e) => setStatus(e.target.value as typeof status)}
+          className="w-auto min-w-0 flex-1 basis-24 sm:max-w-[120px]"
+        >
+          <option value="all">全部状态</option>
+          <option value="unsubmitted">未提交</option>
+          <option value="submitted">已提交</option>
+        </Select>
         <Button onClick={exportCsv} title={filtering ? "导出筛选出来的记录" : "导出全部记录"}>
           <Download size={15} />
           导出
@@ -122,15 +143,18 @@ export function WorkHistory({
               const active = w === selected;
               const current = w === weekStart(today);
               return (
-                <li key={w}>
+                <li
+                  key={w}
+                  className={cx(
+                    "overflow-hidden rounded-xl border transition-colors",
+                    active ? "border-accent bg-accent-soft/40" : "border-line bg-surface hover:border-line-strong",
+                  )}
+                >
                   <button
                     type="button"
                     aria-current={active ? "true" : undefined}
                     onClick={() => onSelectWeek(w)}
-                    className={cx(
-                      "flex w-full cursor-pointer flex-col gap-1.5 rounded-xl border p-3.5 text-left transition-colors",
-                      active ? "border-accent bg-accent-soft/40" : "border-line bg-surface hover:border-line-strong",
-                    )}
+                    className="flex w-full cursor-pointer flex-col gap-1.5 p-3.5 pb-2 text-left"
                   >
                     <div className="flex items-center gap-2">
                       <span className="font-semibold tabular-nums">第 {r.week} 周</span>
@@ -151,19 +175,51 @@ export function WorkHistory({
                         <p className="text-xs text-muted">
                           工作 {r.workDays} 天 · {r.logCount} 条 · {r.hours} 小时
                         </p>
-                        <p className="line-clamp-3 text-[13px] leading-5 whitespace-pre-line text-fg/85">{r.summaryText}</p>
+                        <p className="line-clamp-3 text-[13px] leading-5 whitespace-pre-line text-fg/85">
+                          {r.summaryText}
+                        </p>
                       </>
                     ) : (
                       <p className="text-xs text-faint">这周还没有记录</p>
                     )}
                   </button>
+                  {r.logCount > 0 && (
+                    <div className="flex items-center gap-1 px-3.5 pb-2.5">
+                      <StatusBadge status={weekStatus(r)} />
+                      <IconButton
+                        label="复制全文"
+                        size="sm"
+                        className="ml-auto"
+                        onClick={() => void copy(`第 ${r.week} 周周报`, weeklyText(r))}
+                      >
+                        <Copy size={15} />
+                      </IconButton>
+                      {r.submittedAt ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          title="取消已提交"
+                          onClick={() => void submit.set("weekly", w, false, `第 ${r.week} 周周报`)}
+                        >
+                          <Undo2 size={14} />
+                          取消
+                        </Button>
+                      ) : (
+                        <Button size="sm" onClick={() => void submit.set("weekly", w, true, `第 ${r.week} 周周报`)}>
+                          <CircleCheck size={14} />
+                          标记已提交
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </li>
               );
             })}
           </ul>
-          {weeks.length > limit && (
+          {shown.length === 0 && <p className="py-10 text-center text-[13px] text-faint">没有符合条件的周报</p>}
+          {visible.length > limit && (
             <Button variant="ghost" onClick={() => setLimit(limit + PAGE)}>
-              显示更早的周报（还有 {weeks.length - limit} 周）
+              显示更早的周报（还有 {visible.length - limit} 周）
             </Button>
           )}
         </>

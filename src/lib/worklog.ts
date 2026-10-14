@@ -72,11 +72,14 @@ export interface RemindInfo {
 export interface DailyFields {
   amSummary?: string;
   pmSummary?: string;
+  /** 标记为已提交到公司系统的时间 */
+  submittedAt?: string;
 }
 
 export interface WeeklyFields {
   /** 人工整理过的周报 */
   draft?: WeeklyDraft;
+  submittedAt?: string;
 }
 
 export type ReportKind = "daily" | "weekly";
@@ -193,6 +196,9 @@ export interface DailyReport {
   autoAmSummary: string;
   autoPmSummary: string;
   logCount: number;
+  /** 上午 / 下午总结是否手动改过（改过的会同步到周报） */
+  edited: boolean;
+  submittedAt?: string;
 }
 
 const UNASSIGNED = "未选择项目";
@@ -280,6 +286,10 @@ export function buildDaily(data: WorkData, date: string): DailyReport {
     autoAmSummary: autoAm,
     autoPmSummary: autoPm,
     logCount: logs.length,
+    edited:
+      (fields.amSummary !== undefined && fields.amSummary !== autoAm) ||
+      (fields.pmSummary !== undefined && fields.pmSummary !== autoPm),
+    submittedAt: fields.submittedAt,
   };
 }
 
@@ -349,6 +359,7 @@ export interface WeeklyReport {
   doneLastPlan: string[];
   /** 是否人工整理过 */
   curated: boolean;
+  submittedAt?: string;
   /** 编号后的文字，用来复制 */
   summaryText: string;
   planText: string;
@@ -409,21 +420,37 @@ export function buildWeekly(data: WorkData, date: string): WeeklyReport {
   const logs = data.logs.filter((l) => l.date >= start && l.date <= end).sort(byTime);
   const lookup = projectLookup(data.projects);
 
+  // 日报里改过上午 / 下午总结的那天，周报用改过的文字；没改过的用原始记录
   const days: WeeklyDay[] = [];
+  const effective: WorkLog[] = [];
   for (let i = 0; i < 7; i++) {
     const d = shiftDate(start, i);
     const dayLogs = logs.filter((l) => l.date === d);
     if (!dayLogs.length) continue;
     const daily = buildDaily(data, d);
     const main = mainProject(dayLogs, (id) => String(id));
-    const p = lookup.get(main === "null" ? null : Number(main));
+    const mainId = main === "null" ? null : Number(main);
+    const p = lookup.get(mainId);
+    let dayItems = dayLogs;
+    if (daily.edited) {
+      const unfinished = new Set(dayLogs.filter((l) => !l.done).map((l) => normalize(l.content)));
+      dayItems = uniqueLines([...splitEntries(daily.amSummary), ...splitEntries(daily.pmSummary)]).map((text, k) => ({
+        ...dayLogs[0],
+        id: -(i * 1000 + k + 1),
+        projectId: mainId,
+        content: text,
+        hours: null,
+        done: !unfinished.has(normalize(text)),
+      }));
+    }
+    effective.push(...dayItems);
     days.push({
       date: d,
       weekday: weekdayLabel(d),
       hours: daily.hours,
       projectName: p?.name ?? UNASSIGNED,
       projectCode: p?.code ?? "",
-      content: numberedInline(dayLogs.map((l) => l.content)),
+      content: numberedInline(dayItems.map((l) => l.content)),
     });
   }
 
@@ -442,16 +469,17 @@ export function buildWeekly(data: WorkData, date: string): WeeklyReport {
         done: true,
         fromPlan: true,
       })),
-    ...logCandidates(logs, lookup),
+    ...logCandidates(effective, lookup),
   ];
   const keys = new Set(candidates.map((c) => c.key));
   const textOf = new Map(candidates.map((c) => [c.key, c.text]));
 
-  // 人工整理过：去掉已经不存在的来源（记录被删了）；来源全没了的条目也去掉，手动添加的保留
+  // 人工整理过：去掉已经不存在的来源（记录被删了或日报改了字）。
+  // 只来自一条记录的条目跟着去掉；手动添加的和合并过的是你写的字，保留
   const items: SummaryItem[] = draft
     ? draft.items
         .map((it) => ({ ...it, from: it.from.filter((k) => keys.has(k)) }))
-        .filter((it, i) => !draft.items[i].from.length || it.from.length)
+        .filter((it, i) => draft.items[i].from.length !== 1 || it.from.length)
     : candidates.map((c) => ({ id: c.key, text: c.text, from: [c.key] }));
 
   const used = new Set(items.flatMap((it) => it.from));
@@ -492,6 +520,7 @@ export function buildWeekly(data: WorkData, date: string): WeeklyReport {
     lastPlan,
     doneLastPlan,
     curated: !!draft,
+    submittedAt: data.reports[reportKey("weekly", start)]?.submittedAt,
     summaryText: items.map((it, i) => `${i + 1}. ${it.text}`).join("\n"),
     planText: plan.map((p, i) => `${i + 1}. ${p.text}`).join("\n"),
     logCount: logs.length,
@@ -723,4 +752,31 @@ export function logsCsv(logs: WorkLog[], projects: WorkProject[]): string {
   return [["日期", "周几", "时段", "项目", "工作内容", "工时", "状态"], ...rows]
     .map((r) => r.map(csvCell).join(","))
     .join("\r\n");
+}
+
+/* ---------- 日报列表、提交状态 ---------- */
+
+export type DayStatus = "submitted" | "unsubmitted" | "missed";
+
+/** 某天日报的状态：已提交 / 有记录但没提交 / 工作日却没有记录（漏记）；不需要显示的返回 null */
+export function dayStatus(data: WorkData, date: string, today: string): DayStatus | null {
+  if (data.reports[reportKey("daily", date)]?.submittedAt) return "submitted";
+  if (data.logs.some((l) => l.date === date)) return "unsubmitted";
+  if (date < today && data.settings.remindDays.includes(weekdayOf(date))) return "missed";
+  return null;
+}
+
+/** 日报列表里某个月要显示的日子：到今天为止有状态的日子，新的在前 */
+export function listDays(data: WorkData, month: string, today: string): string[] {
+  return monthGrid(month)
+    .filter((d) => d.startsWith(month) && d <= today && dayStatus(data, d, today))
+    .reverse();
+}
+
+export type WeekStatus = "submitted" | "curated" | "uncurated" | "empty";
+
+export function weekStatus(r: WeeklyReport): WeekStatus {
+  if (r.submittedAt) return "submitted";
+  if (!r.logCount) return "empty";
+  return r.curated ? "curated" : "uncurated";
 }

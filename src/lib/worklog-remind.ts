@@ -1,7 +1,7 @@
 import type { DB } from "./db";
 import { getNotifyConfig, sendMessage, type Message, type Sender } from "./notify";
 import { zonedNow } from "./settings";
-import { buildDaily, buildWeekly, weekStart, type WorkData } from "./worklog";
+import { buildDaily, buildWeekly, dayStatus, reportKey, shiftDate, weekStart, type WorkData } from "./worklog";
 import { getRemindState, getWorkSettings, getWorkWeek, setRemindState } from "./worklog-repo";
 
 /** 下班提醒：到点推送到微信、钉钉，提醒写日报、交周报，消息里带上整理好的内容 */
@@ -37,6 +37,7 @@ export function remindMessage(kind: RemindKind, data: WorkData, date: string, si
     md.push(`**${title}**`, body);
     txt.push(`【${title}】`, body);
   };
+  let note = "";
   let title: string;
   if (kind === "daily") {
     const r = buildDaily(data, date);
@@ -52,6 +53,14 @@ export function remindMessage(kind: RemindKind, data: WorkData, date: string, si
   } else {
     const r = buildWeekly(data, date);
     title = `该交周报了（第 ${r.week} 周）`;
+    // 顺便提醒这一周还没交的日报
+    const statuses = Array.from({ length: 7 }, (_, i) => shiftDate(r.start, i))
+      .filter((d) => d <= date)
+      .map((d) => dayStatus(data, d, date));
+    const unsubmitted = statuses.filter((x) => x === "unsubmitted").length;
+    const missed = statuses.filter((x) => x === "missed").length;
+    const parts = [unsubmitted && `${unsubmitted} 天日报没提交`, missed && `${missed} 天没有记录`].filter(Boolean);
+    note = parts.length ? `本周还有 ${parts.join("、")}。` : "";
     if (!r.logCount) both("这一周还没有工作记录，先补几条，周报就能整理好。");
     else if (!withReport) both(`这周工作 ${r.workDays} 天，记了 ${r.logCount} 条，周报已经整理好了。`);
     else {
@@ -60,6 +69,7 @@ export function remindMessage(kind: RemindKind, data: WorkData, date: string, si
       section("下周计划", r.planText);
     }
   }
+  if (note) both(note);
   const url = link(siteUrl);
   if (url) {
     md.push(`[打开工作记录](${url})`);
@@ -82,11 +92,21 @@ export async function runWorkRemind(db: DB, now = new Date(), send: Sender = sen
   const day = t.local.getDay();
   const due: { kind: RemindKind; key: string }[] = [];
   const state = getRemindState(db);
-  if (s.remindDaily && s.remindDays.includes(day) && state.daily !== t.date && isDue(s.remindTime, t.local)) {
+  const week = weekStart(t.date);
+  const data = getWorkWeek(db, t.date);
+  // 已经标记提交的就不再提醒
+  const dailyDone = !!data.reports[reportKey("daily", t.date)]?.submittedAt;
+  const weeklyDone = !!data.reports[reportKey("weekly", week)]?.submittedAt;
+  if (
+    s.remindDaily &&
+    !dailyDone &&
+    s.remindDays.includes(day) &&
+    state.daily !== t.date &&
+    isDue(s.remindTime, t.local)
+  ) {
     due.push({ kind: "daily", key: t.date });
   }
-  const week = weekStart(t.date);
-  if (s.remindWeekly && s.weeklyDay === day && state.weekly !== week && isDue(s.weeklyTime, t.local)) {
+  if (s.remindWeekly && !weeklyDone && s.weeklyDay === day && state.weekly !== week && isDue(s.weeklyTime, t.local)) {
     due.push({ kind: "weekly", key: week });
   }
 
